@@ -5,17 +5,17 @@
 import {
     isObject,
     merge
-} from './mquery-utils';
+} from './mquery-utils.ts';
 import {
     newRxTypeError,
     newRxError
-} from '../../../rx-error';
+} from '../../../rx-error.ts';
 import type {
     MangoQuery,
     MangoQuerySelector,
     MangoQuerySortPart,
     MangoQuerySortDirection
-} from '../../../types';
+} from '../../../types/index.d.ts';
 
 
 declare type MQueryOptions = {
@@ -29,7 +29,6 @@ export class NoSqlQueryBuilderClass<DocType> {
     public options: MQueryOptions = {};
     public _conditions: MangoQuerySelector<DocType> = {};
     public _fields: any = {};
-    public _path?: any;
     private _distinct: any;
 
     /**
@@ -41,7 +40,8 @@ export class NoSqlQueryBuilderClass<DocType> {
      *
      */
     constructor(
-        mangoQuery?: MangoQuery<DocType>
+        mangoQuery?: MangoQuery<DocType>,
+        public _path?: any
     ) {
         if (mangoQuery) {
             const queryBuilder: NoSqlQueryBuilder<DocType> = this as any;
@@ -70,7 +70,7 @@ export class NoSqlQueryBuilderClass<DocType> {
         if ('string' === type) {
             this._path = arguments[0];
             if (2 === arguments.length) {
-                this._conditions[this._path] = arguments[1];
+                (this._conditions as any)[this._path] = arguments[1];
             }
             return this as any;
         }
@@ -92,7 +92,7 @@ export class NoSqlQueryBuilderClass<DocType> {
     equals(val: any): NoSqlQueryBuilder<DocType> {
         this._ensurePath('equals');
         const path = this._path;
-        this._conditions[path] = val;
+        (this._conditions as any)[path] = val;
         return this as any;
     }
 
@@ -103,7 +103,7 @@ export class NoSqlQueryBuilderClass<DocType> {
     eq(val: any): NoSqlQueryBuilder<DocType> {
         this._ensurePath('eq');
         const path = this._path;
-        this._conditions[path] = val;
+        (this._conditions as any)[path] = val;
         return this as any;
     }
 
@@ -167,7 +167,7 @@ export class NoSqlQueryBuilderClass<DocType> {
             path = arguments[0];
         }
 
-        const conds = this._conditions[path] || (this._conditions[path] = {});
+        const conds = (this._conditions as any)[path] || ((this._conditions as any)[path] = {});
         conds.$mod = val;
         return this as any;
     }
@@ -201,7 +201,7 @@ export class NoSqlQueryBuilderClass<DocType> {
             val = arguments[1];
         }
 
-        const conds = this._conditions[path] || (this._conditions[path] = {});
+        const conds = (this._conditions as any)[path] || ((this._conditions as any)[path] = {});
         conds.$exists = val;
         return this as any;
     }
@@ -251,7 +251,7 @@ export class NoSqlQueryBuilderClass<DocType> {
             criteria = criteria._conditions;
         }
 
-        const conds = this._conditions[path] || (this._conditions[path] = {});
+        const conds = (this._conditions as any)[path] || ((this._conditions as any)[path] = {});
         conds.$elemMatch = criteria;
         return this as any;
     }
@@ -369,7 +369,7 @@ export class NoSqlQueryBuilderClass<DocType> {
     /**
      * Make sure _path is set.
      *
-     * @parmam {String} method
+     * @param {String} method
      */
     _ensurePath(method: any) {
         if (!this._path) {
@@ -380,8 +380,8 @@ export class NoSqlQueryBuilderClass<DocType> {
     }
 
     toJSON(): {
-        query: MangoQuery<DocType>,
-        path?: string
+        query: MangoQuery<DocType>;
+        path?: string;
     } {
         const query: MangoQuery<DocType> = {
             selector: this._conditions,
@@ -405,7 +405,7 @@ export class NoSqlQueryBuilderClass<DocType> {
 }
 
 export function mQuerySortToRxDBSort<DocType>(
-    sort: { [k: string]: 1 | -1 }
+    sort: { [k: string]: 1 | -1; }
 ): MangoQuerySortPart<DocType>[] {
     return Object.entries(sort).map(([k, v]) => {
         const direction: MangoQuerySortDirection = v === 1 ? 'asc' : 'desc';
@@ -471,6 +471,7 @@ OTHER_MANGO_OPERATORS.forEach(function ($conditional) {
     (NoSqlQueryBuilderClass.prototype as any)[$conditional] = function () {
         let path;
         let val;
+
         if (1 === arguments.length) {
             this._ensurePath($conditional);
             val = arguments[0];
@@ -483,7 +484,28 @@ OTHER_MANGO_OPERATORS.forEach(function ($conditional) {
         const conds = this._conditions[path] === null || typeof this._conditions[path] === 'object' ?
             this._conditions[path] :
             (this._conditions[path] = {});
-        conds['$' + $conditional] = val;
+
+
+
+        if ($conditional === 'regex') {
+            if (val instanceof RegExp) {
+                throw newRxError('QU16', {
+                    field: path,
+                    query: this._conditions,
+                });
+            }
+            if (typeof val === 'string') {
+                conds['$' + $conditional] = val;
+            } else {
+                conds['$' + $conditional] = val.$regex;
+                if (val.$options) {
+                    conds.$options = val.$options;
+                }
+            }
+        } else {
+            conds['$' + $conditional] = val;
+        }
+
         return this;
     };
 });
@@ -551,6 +573,6 @@ export function canMerge(conds: any): boolean {
 }
 
 
-export function createQueryBuilder<DocType>(query?: MangoQuery<DocType>): NoSqlQueryBuilder<DocType> {
-    return new NoSqlQueryBuilderClass(query) as NoSqlQueryBuilder<DocType>;
+export function createQueryBuilder<DocType>(query?: MangoQuery<DocType>, path?: any): NoSqlQueryBuilder<DocType> {
+    return new NoSqlQueryBuilderClass(query, path) as NoSqlQueryBuilder<DocType>;
 }

@@ -6,61 +6,66 @@
  */
 
 import assert from 'assert';
-import AsyncTestUtil, { wait } from 'async-test-util';
+import AsyncTestUtil, { wait, waitUntil } from 'async-test-util';
 
-import config from './config';
+import config, { describeParallel } from './config.ts';
 import {
     isRxDatabase,
     createRxDatabase,
-    randomCouchString,
+    randomToken,
     promiseWait,
     RxDatabase,
-} from '../../plugins/core';
+    RxDocument,
+    ensureNotFalsy,
+} from '../../plugins/core/index.mjs';
 
 import {
-    getRxStoragePouch
-} from '../../plugins/pouchdb';
+    schemaObjects,
+    schemas,
+    humansCollection,
+    getPassword,
+    getEncryptedStorage,
+    HumanDocumentType
+} from '../../plugins/test-utils/index.mjs';
 
-
-import * as schemas from './../helper/schemas';
-import * as schemaObjects from './../helper/schema-objects';
-import * as humansCollection from './../helper/humans-collection';
-
-config.parallel('cross-instance.test.js', () => {
+describeParallel('cross-instance.test.js', () => {
+    if (!config.storage.hasMultiInstance) {
+        return;
+    }
     describe('create database', () => {
         it('create a multiInstance database', async () => {
             const db = await createRxDatabase({
-                name: randomCouchString(10),
-                storage: getRxStoragePouch('memory'),
+                name: randomToken(10),
+                storage: config.storage.getStorage(),
                 multiInstance: true
             });
             assert.ok(isRxDatabase(db));
-            db.destroy();
+            db.close();
         });
         it('create a 2 multiInstance databases', async () => {
-            const name = randomCouchString(10);
+            const name = randomToken(10);
             const db = await createRxDatabase({
                 name,
-                storage: getRxStoragePouch('memory'),
+                storage: config.storage.getStorage(),
                 multiInstance: true,
                 ignoreDuplicate: true
             });
             const db2 = await createRxDatabase({
                 name,
-                storage: getRxStoragePouch('memory'),
+                storage: config.storage.getStorage(),
                 multiInstance: true,
                 ignoreDuplicate: true
             });
             assert.ok(isRxDatabase(db));
             assert.ok(isRxDatabase(db2));
-            db.destroy();
-            db2.destroy();
+            db.close();
+            db2.close();
         });
     });
     describe('RxDatabase.$', () => {
         describe('positive', () => {
             it('get event on db2 when db1 fires', async () => {
-                const name = randomCouchString(10);
+                const name = randomToken(10);
                 const c1 = await humansCollection.createMultiInstance(name);
                 const c2 = await humansCollection.createMultiInstance(name);
                 const db1: RxDatabase = c1.database;
@@ -71,19 +76,19 @@ config.parallel('cross-instance.test.js', () => {
                     received++;
                     assert.ok(cEvent.operation);
                 });
-                await c1.insert(schemaObjects.human());
-                await AsyncTestUtil.waitUntil(async () => {
+                await c1.insert(schemaObjects.humanData());
+                await AsyncTestUtil.waitUntil(() => {
                     return received > 0;
                 });
 
-                db1.destroy();
-                db2.destroy();
+                db1.close();
+                db2.close();
             });
         });
         describe('negative', () => {
             it('should not get the same events twice', async () => {
 
-                const name = randomCouchString(10);
+                const name = randomToken(10);
                 const c1 = await humansCollection.createMultiInstance(name);
                 const c2 = await humansCollection.createMultiInstance(name);
                 const db1: RxDatabase = c1.database;
@@ -94,24 +99,24 @@ config.parallel('cross-instance.test.js', () => {
                     emitted.push(cEvent);
                     assert.ok(cEvent.operation);
                 });
-                await c1.insert(schemaObjects.human());
+                await c1.insert(schemaObjects.humanData());
                 await wait(100);
 
-                await AsyncTestUtil.waitUntil(async () => {
+                await AsyncTestUtil.waitUntil(() => {
                     if (emitted.length > 1) {
                         throw new Error('got too many events ' + emitted.length);
                     }
                     return emitted.length === 1;
                 });
 
-                db1.destroy();
-                db2.destroy();
+                db1.close();
+                db2.close();
             });
         });
     });
     describe('Collection.$', () => {
         it('get event on db2 when db1 fires', async () => {
-            const name = randomCouchString(10);
+            const name = randomToken(10);
             const c1 = await humansCollection.createMultiInstance(name);
             const c2 = await humansCollection.createMultiInstance(name);
             let received = 0;
@@ -119,81 +124,64 @@ config.parallel('cross-instance.test.js', () => {
                 received++;
                 assert.ok(cEvent.operation);
             });
-            await c1.insert(schemaObjects.human());
+            await c1.insert(schemaObjects.humanData());
 
-            await AsyncTestUtil.waitUntil(async () => {
+            await AsyncTestUtil.waitUntil(() => {
                 return received > 0;
             });
 
-            c1.database.destroy();
-            c2.database.destroy();
-        });
-        it('get no changes via pouchdb on different dbs', async () => {
-            if (config.storage.name !== 'pouchdb') {
-                return;
-            }
-            const c1 = await humansCollection.create(0);
-            const c2 = await humansCollection.create(0);
-            let got;
-            c2.storageInstance.internals.pouch.changes({
-                since: 'now',
-                live: true,
-                include_docs: true
-            }).on('change', function (change: any) {
-                if (!change.id.startsWith('_'))
-                    got = change;
-            });
-            await c1.insert(schemaObjects.human());
-
-            await promiseWait(50);
-            assert.strictEqual(got, undefined);
-            c1.database.destroy();
-            c2.database.destroy();
+            c1.database.close();
+            c2.database.close();
         });
     });
 
     describe('Document.$', () => {
         it('get event on doc2 when doc1 is changed', async () => {
-            const name = randomCouchString(10);
+            const name = randomToken(10);
             const c1 = await humansCollection.createMultiInstance(name);
             const c2 = await humansCollection.createMultiInstance(name);
-            await c1.insert(schemaObjects.human());
+            await c1.insert(schemaObjects.humanData());
 
             const doc1 = await c1.findOne().exec(true);
-            const doc2 = await c2.findOne().exec(true);
+
+            let doc2: RxDocument<HumanDocumentType> | null = null as any;
+            await waitUntil(async () => {
+                doc2 = await c2.findOne().exec();
+                return !!doc2;
+            });
 
             let received = 0;
-            doc2.$.subscribe(() => {
+            ensureNotFalsy(doc2).$.subscribe(() => {
                 received = received + 1;
             });
 
             let firstNameAfter: any;
-            doc2.get$('firstName').subscribe((newValue: any) => {
+            ensureNotFalsy(doc2).get$('firstName').subscribe((newValue: any) => {
                 firstNameAfter = newValue;
             });
 
-            await doc1.atomicPatch({ firstName: 'foobar' });
+            await doc1.incrementalPatch({ firstName: 'foobar' });
 
             await promiseWait(10);
             await AsyncTestUtil.waitUntil(() => firstNameAfter === 'foobar');
 
             assert.strictEqual(firstNameAfter, 'foobar');
-            c1.database.destroy();
-            c2.database.destroy();
+            c1.database.close();
+            c2.database.close();
         });
         it('should work with encrypted fields', async () => {
-            const name = randomCouchString(10);
-            const password = randomCouchString(10);
+            const name = randomToken(10);
+            const password = await getPassword();
             const db1 = await createRxDatabase({
                 name,
-                storage: getRxStoragePouch('memory'),
+                storage: getEncryptedStorage(),
                 password,
                 multiInstance: true,
                 ignoreDuplicate: true
             });
             const db2 = await createRxDatabase({
                 name,
-                storage: getRxStoragePouch('memory'),
+                storage: getEncryptedStorage(),
                 password,
                 multiInstance: true,
                 ignoreDuplicate: true
@@ -208,10 +196,15 @@ config.parallel('cross-instance.test.js', () => {
                     schema: schemas.encryptedHuman
                 }
             });
-            await c1.human.insert(schemaObjects.encryptedHuman());
+            await c1.human.insert(schemaObjects.encryptedHumanData());
 
             const doc1 = await c1.human.findOne().exec(true);
-            const doc2 = await c2.human.findOne().exec(true);
+
+            let doc2: typeof doc1 | null = null;
+            await waitUntil(async () => {
+                doc2 = await c2.human.findOne().exec();
+                return !!doc2;
+            });
 
             let receivedCollection = 0;
             c2.human.$.subscribe(() => {
@@ -228,27 +221,27 @@ config.parallel('cross-instance.test.js', () => {
                 secretAfter = newValue;
             });
 
-            await doc1.atomicPatch({ secret: 'foobar' });
+            await doc1.incrementalPatch({ secret: 'foobar' });
 
             await AsyncTestUtil.waitUntil(() => secretAfter === 'foobar');
             assert.strictEqual(secretAfter, 'foobar');
 
-            db1.destroy();
-            db2.destroy();
+            db1.close();
+            db2.close();
         });
         it('should work with nested encrypted fields', async () => {
-            const name = randomCouchString(10);
-            const password = randomCouchString(10);
+            const name = randomToken(10);
+            const password = await getPassword();
             const db1 = await createRxDatabase({
                 name,
-                storage: getRxStoragePouch('memory'),
+                storage: getEncryptedStorage(),
                 password,
                 multiInstance: true,
                 ignoreDuplicate: true
             });
             const db2 = await createRxDatabase({
                 name,
-                storage: getRxStoragePouch('memory'),
+                storage: getEncryptedStorage(),
                 password,
                 multiInstance: true,
                 ignoreDuplicate: true
@@ -263,10 +256,14 @@ config.parallel('cross-instance.test.js', () => {
                     schema: schemas.encryptedObjectHuman
                 }
             });
-            await c1.human.insert(schemaObjects.encryptedObjectHuman());
+            await c1.human.insert(schemaObjects.encryptedObjectHumanData());
 
             const doc1 = await c1.human.findOne().exec(true);
-            const doc2 = await c2.human.findOne().exec(true);
+            let doc2: typeof doc1 | null = null;
+            await waitUntil(async () => {
+                doc2 = await c2.human.findOne().exec();
+                return !!doc2;
+            });
 
             let receivedCollection = 0;
             c2.human.$.subscribe(() => {
@@ -283,7 +280,7 @@ config.parallel('cross-instance.test.js', () => {
                 secretAfter = newValue;
             });
 
-            await doc1.atomicPatch({
+            await doc1.incrementalPatch({
                 secret: {
                     name: 'foo',
                     subname: 'bar'
@@ -291,38 +288,35 @@ config.parallel('cross-instance.test.js', () => {
             });
 
             await AsyncTestUtil.waitUntil(() => secretAfter.name === 'foo');
-            assert.deepStrictEqual(secretAfter, {
+
+            assert.deepStrictEqual(JSON.stringify(secretAfter), JSON.stringify({
                 name: 'foo',
                 subname: 'bar'
-            });
+            }));
 
-            db1.destroy();
-            db2.destroy();
+            db1.close();
+            db2.close();
         });
     });
     describe('AutoPull', () => {
         describe('positive', () => {
-            it('should recieve events without calling .socket.pull()', async () => {
-                const name = randomCouchString(10);
+            it('should receive events on the other side', async () => {
+                const name = randomToken(10);
                 const c1 = await humansCollection.createMultiInstance(name);
                 const c2 = await humansCollection.createMultiInstance(name);
-                const waitPromise = AsyncTestUtil.waitResolveable(500);
 
-                let received = 0;
-                c2.$.subscribe(cEvent => {
-                    received++;
-                    assert.ok(cEvent.operation);
-                    waitPromise.resolve();
-                });
-                await c1.insert(schemaObjects.human());
+                const emitted = [];
+                c2.$.subscribe(ev => emitted.push(ev));
 
-                await waitPromise.promise;
-                assert.strictEqual(received, 1);
-                c1.database.destroy();
-                c2.database.destroy();
+                await c1.insert(schemaObjects.humanData());
+
+                await waitUntil(() => emitted.length >= 1);
+
+                c1.database.close();
+                c2.database.close();
             });
-            it('should recieve 2 events', async () => {
-                const name = randomCouchString(10);
+            it('should receive 2 events', async () => {
+                const name = randomToken(10);
                 const c1 = await humansCollection.createMultiInstance(name);
                 const c2 = await humansCollection.createMultiInstance(name);
 
@@ -332,13 +326,13 @@ config.parallel('cross-instance.test.js', () => {
                     assert.ok(cEvent.operation);
                 });
 
-                await c1.insert(schemaObjects.human());
-                await c1.insert(schemaObjects.human());
+                await c1.insert(schemaObjects.humanData());
+                await c1.insert(schemaObjects.humanData());
 
                 await AsyncTestUtil.waitUntil(() => received === 2);
                 assert.strictEqual(received, 2);
-                c1.database.destroy();
-                c2.database.destroy();
+                c1.database.close();
+                c2.database.close();
             });
         });
     });

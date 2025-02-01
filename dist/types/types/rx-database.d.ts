@@ -1,21 +1,20 @@
-import {
-    MigrationState,
+import type {
     RxCollection,
     RxDumpCollection,
     RxDumpCollectionAsAny
-} from './rx-collection';
-import {
-    RxLocalDocument
-} from './rx-document';
-import {
+} from './rx-collection.d.ts';
+import type {
     RxDatabaseBase
-} from '../rx-database';
+} from '../rx-database.d.ts';
 import { Observable } from 'rxjs';
-import { RxStorage } from './rx-storage.interface';
-import { PouchDBExpressServerOptions } from './plugins/server';
+import type { RxStorage } from './rx-storage.interface.d.ts';
+import type { RxLocalDocument } from './plugins/local-documents.d.ts';
+import type { RxCleanupPolicy } from './plugins/cleanup.d.ts';
+import type { ById, HashFunction } from './util.d.ts';
+import type { RxReactivityFactory } from './plugins/reactivity.d.ts';
 
-export interface RxDatabaseCreator<Internals = any, InstanceCreationOptions = any> {
-    storage: RxStorage<Internals, InstanceCreationOptions>,
+export interface RxDatabaseCreator<Internals = any, InstanceCreationOptions = any, Reactivity = unknown> {
+    storage: RxStorage<Internals, InstanceCreationOptions>;
     instanceCreationOptions?: InstanceCreationOptions;
     name: string;
     password?: string | any;
@@ -23,58 +22,72 @@ export interface RxDatabaseCreator<Internals = any, InstanceCreationOptions = an
     eventReduce?: boolean;
     ignoreDuplicate?: boolean;
     options?: any;
+    cleanupPolicy?: Partial<RxCleanupPolicy>;
+    /**
+     * Set this to true if you want to store local documents
+     * in the RxDatabase instance.
+     */
+    localDocuments?: boolean;
+
+    /**
+     * Hash method used to hash strings and json-stringified objects.
+     * This hash does not have to be cryptographically secure,
+     * but it is very important that is does have not create
+     * collisions.
+     * Default is the sha256 from crypto.subtle.digest('SHA-256', data)
+     */
+    hashFunction?: HashFunction;
+
+    /**
+     * By default, count() queries in 'slow' mode are not allowed.
+     */
+    allowSlowCount?: boolean;
+
+    /**
+     * Can be used to add a custom reactivity Factory
+     * that is used on all getters and values that end with the double $$.
+     * For example you can use the signals api of your framework and vuejs ref()
+     */
+    reactivity?: RxReactivityFactory<Reactivity>;
 }
 
-// options for the server-plugin
-export interface ServerOptions {
-    path?: string;
-    port?: number;
-    cors?: boolean;
-    startServer?: boolean;
-    pouchdbExpressOptions?: PouchDBExpressServerOptions;
-}
-
-export type CollectionsOfDatabase = { [key: string]: RxCollection };
+export type CollectionsOfDatabase = ById<RxCollection>;
 export type RxDatabase<
     Collections = CollectionsOfDatabase,
     Internals = any,
     InstanceCreationOptions = any,
-    > = RxDatabaseBase<
-        Internals,
-        InstanceCreationOptions,
-        Collections
-    > &
-    Collections & RxDatabaseGenerated<Collections>;
+    Reactivity = any
+> = RxDatabaseBase<
+    Internals,
+    InstanceCreationOptions,
+    Collections,
+    Reactivity
+> & Collections & RxDatabaseGenerated<Collections, Reactivity>;
 
-export type AllMigrationStates = {
-    collection: RxCollection;
-    state: MigrationState;
-}[];
 
-export interface RxLocalDocumentMutation<StorageType> {
+export interface RxLocalDocumentMutation<StorageType, Reactivity = unknown> {
     insertLocal<LocalDocType = any>(id: string, data: LocalDocType): Promise<
-        RxLocalDocument<StorageType, LocalDocType>
+        RxLocalDocument<StorageType, LocalDocType, Reactivity>
     >;
     upsertLocal<LocalDocType = any>(id: string, data: LocalDocType): Promise<
-        RxLocalDocument<StorageType, LocalDocType>
+        RxLocalDocument<StorageType, LocalDocType, Reactivity>
     >;
     getLocal<LocalDocType = any>(id: string): Promise<
-        RxLocalDocument<StorageType, LocalDocType> | null
+        RxLocalDocument<StorageType, LocalDocType, Reactivity> | null
     >;
     getLocal$<LocalDocType = any>(id: string): Observable<
-        RxLocalDocument<StorageType, LocalDocType> | null
+        RxLocalDocument<StorageType, LocalDocType, Reactivity> | null
     >;
 }
 
-export interface RxDatabaseGenerated<Collections> extends RxLocalDocumentMutation<RxDatabase<Collections>> { }
+export interface RxDatabaseGenerated<Collections, Reactivity> extends RxLocalDocumentMutation<RxDatabase<Collections, any, any, Reactivity>> { }
 
 /**
  * Extract the **DocumentType** of a collection.
  */
-type ExtractDTcol<P> = P extends RxCollection<infer T> ? T : { [prop: string]: any };
+type ExtractDTcol<P> = P extends RxCollection<infer T> ? T : { [prop: string]: any; };
 
 interface RxDumpDatabaseBase {
-    encrypted: boolean;
     instanceToken: string;
     name: string;
     passwordHash: string | null;

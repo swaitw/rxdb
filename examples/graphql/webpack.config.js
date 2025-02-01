@@ -1,13 +1,21 @@
-const path = require('path');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
-const MiniCssExtractPlugin = require('mini-css-extract-plugin');
-const webpack = require('webpack');
+import path from 'path';
+import HtmlWebpackPlugin from 'html-webpack-plugin';
+import MiniCssExtractPlugin from 'mini-css-extract-plugin';
+import webpack from 'webpack';
 
-module.exports = {
+const __dirname = import.meta.dirname;
+
+export default {
     entry: './client/index.js',
     output: {
         filename: 'bundle.js',
-        path: path.resolve(__dirname, 'dist')
+        path: path.resolve(__dirname, 'dist'),
+        library: {
+            type: "module"
+        }
+    },
+    experiments: {
+        outputModule: true,
     },
     plugins: [
         new webpack.ProvidePlugin({
@@ -63,15 +71,5 @@ module.exports = {
         compress: true,
         port: 8888
     },
-    mode: 'development',
-    /**
-     * We need this because lokijs requires the fs node module
-     * which is not there in the browser.
-     * @link https://stackoverflow.com/a/64428818/3443137
-     */
-    resolve: {
-        fallback: {
-            fs: false
-        }
-    }
+    mode: 'development'
 };

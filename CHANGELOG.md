@@ -1,6 +1,1187 @@
-# Changelog
 
-### X.X.X (coming soon)
+# RxDB Changelog
+
+<!-- CHANGELOG NEWEST -->
+
+<!-- ADD new changes here! -->
+
+<!-- /CHANGELOG NEWEST -->
+
+<!-- RELEASE BELOW -->
+
+### 16.4.0 (1 February 2025)
+
+- ADD option to set custom formats in the [schema validators](https://rxdb.info/schema-validation.html)
+- CHANGE enable Ajv strict mode.
+- REMOVE `console.log('exposeWorkerRxStorage()');` from the worker RxStorage.
+- ADD dev-mode check for `undefined` properties in queries. [#6792](https://github.com/pubkey/rxdb/issues/6792)
+
+### 16.3.0 (22 January 2025)
+
+- Run the check for `maxLength` on primary keys also in non-dev mode because people often forget to set this.
+- Make error messages prettier and more readable.
+
+### 16.2.0 (16 January 2025)
+
+- ADD `RxCollection.insertIfNotExists()`
+- Allow uppercase chars at the middle of collection names like `fooBar`.
+- FIX RxServer to not have `process is not defined` [#6764](https://github.com/pubkey/rxdb/issues/6764)
+
+### 16.1.0 (11 January 2025)
+
+- Include RxDB version details in MongoDB handshake [#6722](https://github.com/pubkey/rxdb/pull/6722)
+- ADD Allow connectionParams to be provided as part of wsOptions for replication-graphql [#6741](https://github.com/pubkey/rxdb/pull/6741)
+
+### 16.0.0 (2 January 2025)
+
+🚀 **RxDB v16 is released**
+
+- A list of changes for RxDB v16 can be found [here](https://rxdb.info/releases/16.0.0.html)
+
+### 15.39.0 (21 November 2024)
+
+- FIX bulkInsert with primary keys set in preInsert hook broken in v15.38.3 [#6608](https://github.com/pubkey/rxdb/pull/6608)
+- ADD possibility to pass graphql-ws options into the replication options [#6598](https://github.com/pubkey/rxdb/pull/6598)
+
+### 15.38.3 (18 November 2024)
+
+- FIX findByIds not working with modify and patch [#6592](https://github.com/pubkey/rxdb/pull/6592)
+- FIX bulk inserting 2 docs with same primary key should throw [#6589](https://github.com/pubkey/rxdb/pull/6589)
+
+### 15.38.2 (14 November 2024)
+
+- CHANGE use variable random string lengths in the tests to ensure this works.
+
+### 15.38.1 (13 November 2024)
+
+- FIX random string creation in tests could end up with strings longer than the provided `length`
+
+### 15.38.0 (13 November 2024)
+
+- FIX bad RxState after cleanup [#6503](https://github.com/pubkey/rxdb/pull/6503)
+- FIX RxServer cors settings only applies to OPTIONS when using ExpressAdapter [#6523](https://github.com/pubkey/rxdb/issues/6523)
+- ADD random emojis and umlauts to all random strings in the tests to ensure this works correctly.
+- REMOVE faker dependency for tests and instead use random strings with emojis and umlauts.
+
+- ~FIX [OPFS RxStorage](https://rxdb.info/rx-storage-opfs.html) not working anymore after a cleanup has run on documents with umlauts in the primaryKey or index fields.~ ⬅️ This has been moved to RxDB v16 because it would be a breaking change.
+
+### 15.37.0 (5 November 2024)
+
+- FIX position of dev-mode iframe [#6516](https://github.com/pubkey/rxdb/pull/6516)
+- FIX `$nin` queries not working correctly with the SQLite RxStorage
+- FIX (worker storage) when creating the same database in the worker and on the main thread, the main thread never resolves. [via discord](https://discord.com/channels/969553741705539624/1296068420311187518)
+
+### 15.36.1 (16 October 2024)
+
+- ADD SQLite RxStorage support for Expo SDK 51 with the async API `getSQLiteBasicsExpoSQLiteAsync()`
+
+### 15.36.0 (16 October 2024)
+
+- ADD option to define the RxDB Premium token in an `.env` file
+
+### 15.35.0 (15 October 2024)
+
+- 🆕📢 New Article: [LocalStorage vs. IndexedDB vs. Cookies vs. OPFS vs. WASM-SQLite](https://rxdb.info/articles/localstorage-indexeddb-cookies-opfs-sqlite-wasm.html)
+- FIX RxState.property$ should emit stable reference [#6462](https://github.com/pubkey/rxdb/pull/6462)
+
+### 15.34.1 (2 October 2024)
+
+- ADD proper error message if people miss out the `usesRxDatabaseInWorker` settings in OPFS.
+
+### 15.34.0 (1 October 2024)
+
+- FIX OPFS Storage based RxDatabase cannot be created inside of worker [via discord](https://discord.com/channels/969553741705539624/1290258375359336549)
+- IMPROVE performance of nested property access [#6406](https://github.com/pubkey/rxdb/pull/6406)
+- FIX firestore replication of multiple document with the same serverTimestamp [#6436](https://github.com/pubkey/rxdb/pull/6436)
+
+### 15.33.0 (10 September 2024)
+
+- ADD tutorial for a [local-first Vector Database](https://rxdb.info/articles/javascript-vector-database.html)
+- FIX RxPipeline tries to store metadata that does not match the json schema.
+- ADD utilities function for vector search.
+
+### 15.32.0 (26 August 2024)
+
+- ADD [Fulltext Search Plugin](https://rxdb.info/fulltext-search.html)
+- FIX `RangeError: Invalid count value` error in the OPFS and filesystem storage on cleanups.
+
+### 15.31.4 (22 August 2024)
+
+### 15.31.3 (21 August 2024)
+
+### 15.31.2 (21 August 2024)
+
+- FIX `postCleanup` hook not running
+
+### 15.31.1 (19 August 2024)
+
+- ADD `postCleanup` hook.
+
+### 15.31.0 (14 August 2024)
+
+- ADD [RxPipeline Plugin](https://rxdb.info/rx-pipeline.html).
+- FIX (denoKV RxStorage) retry writes when db is locked.
+
+### 15.30.2 (5 August 2024)
+
+- FIX `node:sqlite` couldn't be found in react native [#6291](https://github.com/pubkey/rxdb/issues/6291)
+
+### 15.30.1 (3 August 2024)
+
+- FIX `node:sqlite` couldn't be found in react native [#6291](https://github.com/pubkey/rxdb/issues/6291)
+
+### 15.30.0 (2 August 2024)
+
+- FIX quotes problem on windows with the scripts of the `package.json`
+- CHANGE `getSQLiteBasicsNodeNative()` requires the constructor as param
+- FIX key-compression broken with boolean indexes on dexie [#6267](https://github.com/pubkey/rxdb/pull/6267)
+- FIX type of `RxQuery.$` must be `Observable` [#6285](https://github.com/pubkey/rxdb/issues/6285)
+
+### 15.29.0 (29 July 2024)
+
+- ADD support for the `node:sqlite` module to the SQLite RxStorage
+- FIX several problem with the memory-mapped RxStorage in ReactNative
+
+### 15.28.1 (19 July 2024)
+
+- ADD storage bucket support to the [IndexedDB RxStorage](https://rxdb.info/rx-storage-indexeddb.html).
+- FIX error when calling bulkUpsert() with multiple docs where one fails and one suceeds.
+
+### 15.28.0 (9 July 2024)
+
+- CHANGE RxStorage interface: For better performance on remote storages, `RxStorageInstance.bulkWrite()` must only return errors, not the written documents data.
+
+### 15.27.0 (7 July 2024)
+
+- FIX Wrong Reactivity generics passed by RxCollection extending RxCollectionBase [#6188](https://github.com/pubkey/rxdb/issues/6188)
+- IMPROVE performance of ChangeEventBuffer by processing events in bulks.
+- IMPROVE performance of DocCache by processing events in bulks.
+- IMPROVE performance of ChangeEventBuffer and DocCache by lazily processing tasks.
+
+### 15.26.0 (3 July 2024)
+
+- IMPROVE performance of `.appendToArray()`
+- IMPROVE performance of writes to the memory RxStorage
+- ADD iframe tracking to dev-mode plugin.
+
+### 15.25.0 (28 June 2024)
+
+- FIX RxState sometimes does writes to the storage that do not match the schema.
+- FIX Query Builder does not work on queries created by `.findByIds()` [#6148](https://github.com/pubkey/rxdb/issues/6148)
+- FIX (IndexedDB RxStorage) When used with Sharding and Workers, it sometimes errors on the first query after db creation.
+
+### 15.24.0 (9 June 2024)
+
+- Opened the [RxDB User Survey 2024](https://rxdb.info/survey)
+- FIX rx-state multi instance observable broken [#6084](https://github.com/pubkey/rxdb/pull/6084)
+
+### 15.23.0 (29 May 2024)
+
+- FIX type resolving in webpack [#6051](https://github.com/pubkey/rxdb/pull/6051)
+
+### 15.22.0 (23 May 2024)
+
+- Add missing extensions error field to errorToPlainJson [#6029](https://github.com/pubkey/rxdb/pull/6029)
+- ADD dedicated [errors page](https://rxdb.info/errors.html)
+- FIX randomly failing replication test
+- ADD non-premium console.log on the [LokiJS RxStorage](https://rxdb.info/rx-storage-lokijs.html#disabling-the-non-premium-console-log)
+
+### 15.21.3 (20 May 2024)
+
+- ADD publish the npm package with the [provenance statements](https://docs.npmjs.com/generating-provenance-statements)
+
+### 15.21.0 (18 May 2024)
+
+- FIX `collection.remove()` must end up with the correct RxCollection state across tabs. [5721](https://github.com/pubkey/rxdb/issues/5721)
+- ADD `RxCollection.onRemove` hooks to detect the removing of a RxCollection across tabs.
+- IMPROVE performance of insert to [IndexedDB](https://rxdb.info/rx-storage-indexeddb.html)
+- ADD non-premium console.log on the [Dexie.js RxStorage](https://rxdb.info/rx-storage-dexie.html#disabling-the-non-premium-console-log)
+
+### 15.20.0 (12 May 2024)
+
+- ADD `RxQuery.patch()` `RxQuery.incrementalPatch()` `RxQuery.modify()` `RxQuery.incrementalModify()` and `RxQuery.incrementalRemove()`.
+- FIX `RxDocument.update()` must return the latest revision of the `RxDocument`.
+- ADD(GraphQL replication) change GraphQL query builder functions to generate output fields for nested queries [#5976](https://github.com/pubkey/rxdb/pull/5976)
+- ADD `queryModifier` to SQLite RxStorage
+- IMPROVE performance of insert-many to the memory RxStorage by 40%.
+- IMPROVE performance of `getHeightOfRevision()`.
+- ADD check to throw helpfull error message when a Date() object is passed instead of plain json data.
+
+### 15.19.0 (29 April 2024)
+
+- ADD the new [Memory-Mapped RxStorage](https://rxdb.info/rx-storage-memory-mapped.html), a better alternative for the Memory-Synced RxStorage.
+
+### 15.18.6 (29 April 2024)
+
+### 15.18.5 (29 April 2024)
+
+### 15.18.4 (27 April 2024)
+
+### 15.18.3 (25 April 2024)
+
+### 15.18.2 (25 April 2024)
+
+- Memory RxStorage: Add `categorizedByWriteInput` property that can be used by other plugins.
+
+### 15.18.1 (18 April 2024)
+
+- FIX CouchDB replication error `Cannot read properties of undefined (reading '_attachments')`
+
+### 15.18.0 (17 April 2024)
+
+- FIX memory-synced storage must be able to query encrypted fields on the in-memory side.
+- RxServer: `updatedAt` must be `lwt` [#61](https://github.com/pubkey/rxdb-server/pull/61)
+- RxServer: Fix using `parseFloat` instead of `parseInt` [#5883](https://github.com/pubkey/rxdb/issues/5883)
+
+### 15.17.0 (8 April 2024)
+
+- ADD `RxReplicationState.remove()` to delete the metadata of a specific replication.
+- FIX IndexedDB RxStorage: Rerun database creation when IndexedDB database was closed by [safari bug](https://bugs.webkit.org/show_bug.cgi?id=197050)
+- FIX vite bundling error with WebRTC replication [#5841](https://github.com/pubkey/rxdb/issues/5841)
+- ADD replication-webrtc: allow passing config to simple-peer [#5838](https://github.com/pubkey/rxdb/pull/5838)
+
+### 15.16.0 (28 March 2024)
+
+- Update dexie.js to version `4.0.1`
+- Deprecate LokiJS RxStorage
+
+### 15.15.1 (27 March 2024)
+
+### 15.15.0 (27 March 2024)
+
+- ADD `PreactSignalsRxReactivityFactory` to use [custom reactivity](https://rxdb.info/reactivity.html) with **preact signals** instead of observables.
+- ADD `VueRxReactivityFactory` to use [custom reactivity](https://rxdb.info/reactivity.html) with **vue shallow refs** instead of observables.
+- ADD(reactivity) pass reference to `RxDatabase` to `fromObservable()`
+
+### 15.14.0 (25 March 2024)
+
+- ADD [Fastify adapter to RxServer](https://rxdb.info/rx-server.html)
+- ADD [Koa adapter to RxServer](https://rxdb.info/rx-server.html)
+
+### 15.13.4 (24 March 2024)
+
+### 15.13.3 (24 March 2024)
+
+### 15.13.2 (24 March 2024)
+
+### 15.13.1 (24 March 2024)
+
+### 15.13.0 (24 March 2024)
+
+- REFACTOR RxServer package. (Includes breaking changes of the beta RxServer!)
+
+### 15.12.0 (16 March 2024)
+
+- [SQLite RxStorage](https://rxdb.info/rx-storage-sqlite.html) add support to use Webassembly SQLite in the browser
+- FIX(Lokisjs RxStorage) always use slice() for applying offset and limit [#5757](https://github.com/pubkey/rxdb/pull/5757)
+- FIX randomly failing lokijs and denokv test [#5765](https://github.com/pubkey/rxdb/pull/5765)
+
+### 15.11.1 (10 March 2024)
+
+### 15.11.0 (10 March 2024)
+
+- ADD [RxState](https://rxdb.info/rx-state.html): A convenient state library to store, fetch and observe complex json data that is persisted into RxDB.
+- ADD automatically extend the RxDocument type so it knows about the `RxDocument.myField$` observables.
+- ADD check to ensure `Infinity` is not used when defining index sizes in the `RxJsonSchema`
+- FIX do not automatically set `multiInstance: false` for shared worker storage databases.
+
+### 15.10.0 (27 February 2024)
+
+- IMPROVE [OPFS RxStorage](https://rxdb.info/rx-storage-opfs.html) performance.
+- ADD `usesRxDatabaseInWorker` option to the [OPFS RxStorage](https://rxdb.info/rx-storage-opfs.html).
+- ADD `getRxStorageOPFSMainThread()` to run OPFS from the main thread instead of a worker for less latency.
+
+### 15.9.1 (21 February 2024)
+
+- FIX creating two databases with the same name but different storage must work.
+
+### 15.9.0 (21 February 2024)
+
+- ADD `awaitWritePersistence` option to memory-synced storage.
+
+### 15.8.1 (14 February 2024)
+
+- FIX [#5624](https://github.com/pubkey/rxdb/issues/5624) Maximum call stack size exceeded during encryptString
+
+### 15.8.0 (10 February 2024)
+
+- ADD support for [custom reactivity factories](https://rxdb.info/reactivity.html) like angular signals or vue template refs.
+
+### 15.7.0 (7 February 2024)
+
+- FIX key-compression broken on keys with brackets [#5605](https://github.com/pubkey/rxdb/issues/5605)
+
+### 15.6.2 (7 February 2024)
+
+- FIX using encryption plugins inside of worker was broken
+- FIX(premium) missing type `SharedWorker`
+
+### 15.6.1 (1 February 2024)
+
+- FIX(lokijs) `$in` operator not working on arrays.
+
+### 15.6.0 (1 February 2024)
+
+- FIX firestore replication not working with schema validation [#5572](https://github.com/pubkey/rxdb/issues/5572)
+- FIX Replication observation mode ignored when push handler is waiting [#5571](https://github.com/pubkey/rxdb/issues/5571)
+- FIX migration from v14 -> v15 is broken when IndexedDB is used inside of worker. [5565](https://github.com/pubkey/rxdb/issues/5565)
+
+### 15.5.0 (30 January 2024)
+
+- ADD [RxServer](https://rxdb.info/rx-server.html) 🎉
+- ADD Optionally supress dev mode Warning [#5556](https://github.com/pubkey/rxdb/issues/5556)
+
+### 15.4.3 (28 January 2024)
+
+### 15.4.2 (24 January 2024)
+
+- ADD(worker storage) support for directly imported `Worker` and `SharedWorker` functions as `workerInput`.
+
+### 15.4.1 (24 January 2024)
+
+- ADD export test utilities so other projects can use them
+
+### 15.4.0 (22 January 2024)
+
+- ADD helpers for the new server plugin
+- ADD `RxJsonSchema.internalIndexes`
+- ADD(opfs-storage) allow to set `jsonPositionSize` to increase the maxium database size to be bigger than 100 MegaByte.
+
+### 15.3.0 (15 January 2024)
+
+- ADD tutorial on [how to start a HTTP replication with a custom server](https://rxdb.info/replication-http.html)
+- FIX `.count()` broken on key-compression plugin [#5492](https://github.com/pubkey/rxdb/pull/5492)
+- UPDATE dexie to version `4.0.1-beta.6` [#5469](https://github.com/pubkey/rxdb/pull/5469)
+
+### 15.2.0 (5 January 2024)
+
+- FIX(dexie.js) migration from v14 to v15 not working.
+- ADD  initialCheckpoint for Couchdb [#5461](https://github.com/pubkey/rxdb/pull/5461)
+
+### 15.1.0 (2 January 2024)
+
+- Add `operationName` to graphQL requests [#5418](https://github.com/pubkey/rxdb/pull/5418)
+- Custom fetch to support axios for the graphQL replication [#5421](https://github.com/pubkey/rxdb/pull/5421)
+- FIX CRDT not working with undefined fields [#5423](https://github.com/pubkey/rxdb/pull/5423)
+
+### 15.0.0 (20 December 2023)
+
+🚀 **RxDB v15 is released**
+
+- A list of changes for RxDB v15 can be found [here](https://rxdb.info/releases/15.0.0.html)
+
+### 14.17.1 (24 September 2023)
+
+- Ensure the test suite runs in the [bun runtime](https://bun.sh/)
+
+### 14.17.0 (18 September 2023)
+
+- Expose path in validate-z-schema error logs [#4900](https://github.com/pubkey/rxdb/pull/4900)
+- ADD options for the worker storages [#4925](https://github.com/pubkey/rxdb/issues/4925)
+- ADD the [MongoDB RxStorage](https://rxdb.info/rx-storage-mongodb.html)
+
+### 14.16.0 (21 August 2023)
+
+- FIX primaryKey with value "constructor", breaks findOne()
+- FIX Queries with `$lt` selector on primaryKey broken [#4751](https://github.com/pubkey/rxdb/pull/4751)
+- UPDATE [mingo](https://github.com/kofrasa/mingo) to `6.4.4`
+
+### 14.15.1 (27 July 2023)
+
+- FIX using `.count()` with `allowSlowCount: true` can return wrong results.
+
+### 14.15.0 (18 July 2023)
+
+- FIX count() is incorrect [#4755](https://github.com/pubkey/rxdb/issues/4755)
+
+### 14.14.2 (10 July 2023)
+
+- FIX #4804 requestIdlePromise broken in react-native (#4813)
+- FIX #4781 GraphQL Replication Cancel With Database Destroy
+
+### 14.14.1 (23 June 2023)
+
+- Fix returning deleted items in find queries [#4773](https://github.com/pubkey/rxdb/pull/4773)
+
+### 14.14.0 (7 June 2023)
+
+- ADD [NATS replication](https://rxdb.info/replication-nats.html)
+
+### 14.13.0 (2 June 2023)
+
+- Add new hooks in the replication write [#4754](https://github.com/pubkey/rxdb/pull/4754)
+- REFACTOR(docs) [quickstart page](https://rxdb.info/quickstart.html)
+- REFACTOR(docs) [landing page](https://rxdb.info/)
+
+### 14.12.1 (30 May 2023)
+
+- Fix prevent delete _rev from row.doc [#4752](https://github.com/pubkey/rxdb/pull/4752)
+- IMPROVE landingpage hero section [#4753](https://github.com/pubkey/rxdb/pull/4753)
+
+### 14.12.0 (23 May 2023)
+
+- FIX(couchdb replication) Retries must respect `retryTime` to not cause the UI to stuck [related #4612](https://github.com/pubkey/rxdb/pull/4612)
+- FIX(OPFS RxStorage) various bugs with umlauts
+- REMOVE outdated tests [related #4741](https://github.com/pubkey/rxdb/pull/4741)
+- FIX checkSchema for anyOf and items array [#4741](https://github.com/pubkey/rxdb/pull/4741)
+
+### 14.11.5 (19 May 2023)
+
+### 14.11.4 (17 May 2023)
+
+### 14.11.3 (16 May 2023)
+
+### 14.11.2 (15 May 2023)
+
+### 14.11.1 (4 May 2023)
+
+- FIX remove `pouchdb-selector-core` dependency [#4722](https://github.com/pubkey/rxdb/issues/4722)
+
+### 14.11.0 (26 April 2023)
+
+- ADD Links to [RxDB User Survey 2023](https://rxdb.info/survey.html)
+- FIX better support for as const schemas [#4686](https://github.com/pubkey/rxdb/pull/4686)
+
+### 14.10.0 (25 April 2023)
+
+- ADD [Filesystem Node RxStorage](https://rxdb.info/rx-storage-filesystem-node.html)
+
+### 14.9.0 (20 April 2023)
+
+- ADD [attachment compression plugin](https://rxdb.info/rx-attachment.md#attachment-compression)
+- REFACTOR Use custom `appendToArray()` instead of slow `Array.concat()`
+
+### 14.8.3 (16 April 2023)
+
+- FIX(data-migrator) use `count()` instead of `query()` to count documents.
+- FIX(data-migrator) send correct `writeRow.previous` to old storage for deletion.
+
+### 14.8.2 (15 April 2023)
+
+### 14.8.1 (15 April 2023)
+
+### 14.8.0 (15 April 2023)
+
+- FIX(docs) `eventReduce: false` is the default. [#4614](https://github.com/pubkey/rxdb/pull/4614) You have to manually enable eventReduce.
+- ADD(storage-opfs) attachments support.
+- CHANGE `RxStorageInstance.getAttachmentData()` add `digest` parameter.
+
+### 14.7.2 (11 April 2023)
+
+### 14.7.0 (11 April 2023)
+
+- ADD [OPFS RxStorage](https://rxdb.info/rx-storage-opfs.html) for browsers (premium).
+- ADD Check to ensure that the primaryKey does not contain a double-quote.
+
+### 14.6.5 (10 April 2023)
+
+### 14.6.4 (8 April 2023)
+
+### 14.6.3 (8 April 2023)
+
+### 14.6.2 (7 April 2023)
+
+- FIX(remote-storage) `mode: 'one'` option must reuse the RemoteMessageChannel
+- IMPROVE performance of index creation on some storages.
+
+### 14.6.1 (6 April 2023)
+
+- FIX `requestIdlePromise()` must run in a queue.
+- ADD Export ReplicationOptions type [#4606](https://github.com/pubkey/rxdb/pull/4606)
+- ADD `mode` option to remote storage
+
+### 14.6.0 (31 March 2023)
+
+- FIX wrong index generation on some number fields that do not have decimals.
+
+### 14.5.2 (30 March 2023)
+
+- ADD method `getPrimaryKeyFromIndexableString()`
+- REFACTOR utils for `Map` and `WeakMap` caching
+- FIX: lost RxDocument in preSave from v14.0.0 [#4581](https://github.com/pubkey/rxdb/pull/4581)
+
+### 14.5.1 (28 March 2023)
+
+- ADD `getIndexStringLength()` helper method
+
+### 14.5.0 (27 March 2023)
+
+- ADD (dev-mode) ensure it throws on malformated primary keys
+- UPDATE typescript to [version 5](https://devblogs.microsoft.com/typescript/announcing-typescript-5-0/)
+- ADD(replication-firestore): add filtered replication [#4590](https://github.com/pubkey/rxdb/pull/4590)
+- FIX(typescript) schema type not working with readonly array [#4579](https://github.com/pubkey/rxdb/pull/4579)
+
+### 14.4.0 (24 March 2023)
+
+- FIX multiple problems in the query planner
+- ADD 'includeWsHeaders' property for GraphQL replication [#4533](https://github.com/pubkey/rxdb/pull/4533)
+- UPDATE [broadcast-channel](https://github.com/pubkey/broadcast-channel) to version `5.0.0`
+- FIX query-builder copies RxQuery's other param [#4587](https://github.com/pubkey/rxdb/pull/4587)
+
+### 14.3.7 (18 March 2023)
+
+### 14.3.6 (15 March 2023)
+
+### 14.3.5 (15 March 2023)
+
+### 14.3.4 (15 March 2023)
+
+### 14.3.3 (14 March 2023)
+
+### 14.3.2 (13 March 2023)
+
+### 14.3.1 (13 March 2023)
+
+### 14.3.0 (13 March 2023)
+
+- FIX RxDocument getter should return the same object on property paths [#4548](https://github.com/pubkey/rxdb/pull/4548)
+- OPTIMIZE use `findDocumentsById()` on queries that do only do an `$in` operator on the primary key.
+- FIX `$or` query with other operator on dexie.js
+
+### 14.2.3 (10 March 2023)
+
+### 14.2.1 (9 March 2023)
+
+- ADD docs for remote storage `customRequestHandler`
+
+### 14.2.0 (8 March 2023)
+
+- CHANGE increase the default batch size of the migration plugin from `10` to `200`.
+- FIX `awaitInitialReplication()` must not resolve on error-only replication handlers.
+
+### 14.1.9 (4 March 2023)
+
+### 14.1.8 (2 March 2023)
+
+### 14.1.6 (2 March 2023)
+
+### 14.1.5 (2 March 2023)
+
+### 14.1.3 (1 March 2023)
+
+### 14.1.2 (26 February 2023)
+
+- FIX ensure writing many documents at once works with every RxStorage.
+
+### 14.1.1 (24 February 2023)
+
+- REMOVE broken dev dependency [wrtc](https://www.npmjs.com/package/wrtc)
+- FIX(SQLite) broken pragma calls on iOS
+
+### 14.1.0 (23 February 2023)
+
+- CHANGE premium plugin users can still use the code after the license has expired.
+- ADD(utils) export `RXDB_VERSION` variable.
+- REFACTOR(RxStorageStatics) use the same query matcher and sort function everywhere, not dependend by storage implementation.
+
+### 14.0.5 (22 February 2023)
+
+- SQLite: Added logger function
+- ADD capacitor build to angular example
+
+### 14.0.4 (19 February 2023)
+
+- websocket-replication: pass all websocket options to constructor [#4449](https://github.com/pubkey/rxdb/pull/4449)
+- FIX Firebase Replication Issues [#4405](https://github.com/pubkey/rxdb/pull/4405)
+
+### 14.0.3 (15 February 2023)
+
+### 14.0.2 (15 February 2023)
+
+### 14.0.1 (13 February 2023)
+
+- FIX(websocket remote storage) custom request not working with multiple clients
+
+### 14.0.0 (8 February 2023) BREAKING [read the announcement](https://rxdb.info/releases/14.0.0.html)
+
+- Remove the deprecated PouchDB RxStorage.
+- REMOVE old `replication-couchdb` plugin. Rename `replication-couchdb-new` to `replication-couchdb`.
+- Remove depricated `skipIfSame` from `putAttachment()`
+- CHANGE use plain json errors inside of RxError parameters to make debugging easier.
+
+- CHANGE Make RxDocuments immutable
+- ADD `RxDocument.getLatest()`
+- CHANGE `RxCollection.findByIds()` now returns a `RxQuery`.
+- REMOVED `RxCollection.findByIds$`, use `RxCollection.findByIds().$` instead.
+- CHANGE Prefix storage plugins with `storage-` like `rxdb/plugins/storage-dexie`.
+- RENAME `atomicUpdate()` to `incrementalModify()`
+- RENAME `atomicPatch()` to `incrementalPatch()`
+- RENAME `atomicUpsert()` to `incrementalUpsert()`
+- ADD `RxDocument().incrementalUpdate()`
+- ADD `RxDocument.incrementalRemove()`
+- ADD non-incremental `RxDocument` methods `patch()` and `modify()`
+- ADD typings to the query selector
+- CHANGE start replication via pure functions instead of RxCollection methods.
+- CHANGE `RxDocument.$` emits `RxDocument` instances instead of the plain document data.
+- ADD `push.initialCheckpoint` to start a replication from a given checkpoint.
+
+- CHANGE Do not use hash for revisions but use database instance token instead.
+- CHANGE crunch multiple incremental (aka 'atomic') operations into a single database write. Also batch writes to multiple documents into a single write.
+- REMOVE deprecated `babel-plugin-transform-async-to-promises` plugin.
+- CHANGE to reduce bundle size and improve performance, the following JavaScript features will no longer be transpiled:
+  - [async/await](https://caniuse.com/async-functions)
+  - [Arrow functions](https://caniuse.com/arrow-functions)
+  - [for...of](https://caniuse.com/?search=for...of)
+  - [shorthand properties](https://caniuse.com/mdn-javascript_operators_object_initializer_shorthand_property_names)
+  - [Spread operator](https://caniuse.com/?search=spread%20operator)
+  - [destructuring](https://caniuse.com/?search=destructuring)
+  - [default parameters](https://caniuse.com/?search=default%20parameters)
+  - [object spread](https://caniuse.com/?search=Object%20spread)
+
+Bugfixes: 
+- CHANGE (memory RxStorage) do not clean up database state on closing of the storage, only on `remove()`.
+- FIX CouchDB replication: Use correct default fetch method.
+- FIX schema hashing should respect the sort order [#4005](https://github.com/pubkey/rxdb/pull/4005)
+- FIX replication does not provide a `._rev` to the storage write when a conflict is resolved.
+- FIX(remote storage) ensure caching works properly even on parallel create-calls
+- FIX(replication) Composite Primary Keys broken on replicated collections [#4190](https://github.com/pubkey/rxdb/pull/4190)
+- FIX(sqlite) $in Query not working SQLite [#4278](https://github.com/pubkey/rxdb/issues/4278)
+- FIX CouchDB push is throwing error because of missing revision [#4299](https://github.com/pubkey/rxdb/pull/4299)
+- ADD dev-mode shows a `console.warn()` to ensure people do not use it in production.
+- Remove the usage of `Buffer`. We now use `Blob` everywhere.
+- FIX import of socket.io [#4307](https://github.com/pubkey/rxdb/pull/4307)
+- FIX Id length limit reached with composite key [#4315](https://github.com/pubkey/rxdb/issues/4315)
+- FIX `$regex` query not working on remote storage.
+- FIX SQLite must store attachments data as Blob instead of base64 string to reduce the database size.
+- FIX CouchDB replication conflict handling
+- CHANGE Encryption plugin was renamed to `encryption-crypto-js`
+- FIX replication state meta data must also be encrypted.
+- FIX crash with null in selector [#4369](https://github.com/pubkey/rxdb/pull/4369)
+- FIX storage instances MUST NOT mutate the given database- and collection-name.
+- REMOVE deprecated `babel-plugin-transform-async-to-promises` plugin.
+- ADD Ability to use a responseModifier for GraphQL push replication [#4385](https://github.com/pubkey/rxdb/pull/4385)
+- FIX Add null check for isRxDocument [#4406](https://github.com/pubkey/rxdb/pull/4406)
+
+### 13.17.1 (30 December 2022)
+
+- FIX Add missing mingo array operators [#4203](https://github.com/pubkey/rxdb/pull/4203) Thanks [@swnf](https://github.com/swnf)
+- FIX(sqlite) `$elemMatch` query did not work correctly on object arrays.
+- CHANGE(sqlite) do not use `ORDER BY` on count queries for better performance.
+
+### 13.17.0 (29 December 2022)
+
+- FIX(lokijs) wrong query result when sorting on a nested field.
+- IMPROVE usage of the [mingo query library](https://github.com/kofrasa/mingo) by only adding the operators to the build that are really needed.
+- CHANGE use faster deep clone method.
+
+### 13.16.1 (27 December 2022)
+
+### 13.16.0 (26 December 2022)
+
+- ADD [Vite Vanilla Typescript Example](https://github.com/pubkey/rxdb/tree/master/examples/vite-vanilla-ts) Thanks [@SebasG22](https://github.com/SebasG22)
+- ADD [Use exports field in package.json](https://github.com/pubkey/rxdb/pull/4196) Thanks [@SebasG22](https://github.com/SebasG22) and [@swnf](https://github.com/swnf)
+
+### 13.15.3 (13 December 2022)
+
+- ADD `$regex` support to the [SQLite RxStorage](https://rxdb.info/rx-storage-sqlite.html)
+
+### 13.15.2 (11 December 2022)
+
+- FIX(SQLite) `getSQLiteBasicsQuickSQLite` must use `executeAsync`
+
+### 13.15.1 (11 December 2022)
+
+### 13.15.0 (10 December 2022)
+
+- ADD [SharedWorker RxStorage Plugin](https://rxdb.info/rx-storage-shared-worker.html)
+
+### 13.14.3 (9 December 2022)
+
+- FIX Ensure equal behavior across all storages on call to `.close()` after `.remove()`.
+
+### 13.14.2 (9 December 2022)
+
+### 13.14.1 (9 December 2022)
+
+### 13.14.0 (9 December 2022)
+
+- ADD [Remote RxStorage Plugin](https://rxdb.info/rx-storage-remote.html)
+
+### 13.13.7 (6 December 2022)
+
+- REFACTOR the `electron` plugin to improve ipcRenderer communications.
+- REMOVE `is-electron` dependency.
+
+### 13.13.6 (5 December 2022)
+
+- REFACTOR the remote RxStorage for electron ipcRenderer
+
+### 13.13.5 (2 December 2022)
+
+### 13.13.4 (2 December 2022)
+
+### 13.13.3 (2 December 2022)
+
+### 13.13.2 (30 November 2022)
+
+### 13.13.1 (30 November 2022)
+
+- UPDATE `isomorphic-ws` to `5.0.0`
+
+### 13.13.0 (30 November 2022)
+
+- ADD [Firestore Replication Plugin](https://rxdb.info/replication-firestore.html)
+- FIX run the unit tests for the migration plugin on all storages.
+
+### 13.12.0 (29 November 2022)
+
+- ADD [electron ipcRenderer plugin](./docs-src/electron.md) which can be used in Electron.js to run the RxStorage in the main process and the RxDatabase in the renderer processes.
+- Removed the electron-remote example because `@electron/remote` is deprecated.
+- FIX emit false on active$ after replication is done [#4136](https://github.com/pubkey/rxdb/pull/4136) Thanks [@maxnowack](https://github.com/maxnowack)
+- Deprecated the PouchDB RxStorage, [read this](https://rxdb.info/questions-answers.html#why-is-the-pouchdb-rxstorage-deprecated)
+
+### 13.11.1 (23 November 2022)
+
+- FIX Throw proper error message when a boolean index is used in the Dexie.js RxStorage.
+
+### 13.11.0 (19 November 2022)
+
+- ADD [replication-webrtc](./docs-src/replication-webrtc.md) which can be used to replicate data peer-to-peer without a backend server.
+
+### 13.10.1 (10 November 2022)
+
+### 13.10.0 (10 November 2022)
+
+- ADD [replication-couchdb-new plugin](./docs-src/replication-couchdb-new.md) which can be used to replicate **any** [RxStorage](https://rxdb.info/rx-storage.html) with a CouchDB endpoint.
+- ADD skip replication `retryTime` if `navigator.onLine` becomes `true`.
+- FIX `active$` should emit during replication [#4117](https://github.com/pubkey/rxdb/pull/4117) Thanks [@maxnowack](https://github.com/maxnowack)
+
+### 13.9.0 (7 November 2022)
+
+- REFACTOR use faster `areRxDocumentArraysEqual` instead of doing a deep-equal check.
+- ADD check to easier debug wrongly behaving backend during replication.
+- FIX error `dev-mode added multiple times` is removed because it is annoying when using react hot-swap. Instead `addRxPlugin()` will now only throw if a different plugin is added that has the same name as a plugin that was added before.
+- REFACTOR create the `digest` of an attachment inside of the `RxStorage`, not in RxDB. This makes the behavior equal to CouchDB and solves a lot of problems caused by different hashing or base64 encoding of the RxStorage implementations. (Fixes [#4107](https://github.com/pubkey/rxdb/pull/4107)) Thanks [@Elendiar](https://github.com/Elendiar)
+- FIX GraphQL replication: should stop syncing if we receive less docs than pull.batchSize [#4110](https://github.com/pubkey/rxdb/pull/4110) Thanks [@jwallet](https://github.com/jwallet)
+
+### 13.8.3 (3 November 2022)
+
+- FIX TS Error in Plugin "Replicate-GraphQL" : GraphQL Websocket on "isomorphic-ws" import [#4104](https://github.com/pubkey/rxdb/pull/4104) Thanks [@jwallet](https://github.com/jwallet)
+
+### 13.8.2 (1 November 2022)
+
+- UPDATE `fake-indexeddb` to version `4.0.0`
+- REFACTOR use `webpack` instead of `browserify` in karma tests.
+- REMOVE `graphql-client` dependency [#3497](https://github.com/pubkey/rxdb/pull/3497)
+
+### 13.8.1 (1 November 2022)
+
+- FIX wrong query results in some cases with many operators.
+- REMOVE `deep-freeze` npm dependency because it has no author.
+
+### 13.8.0 (31 October 2022)
+
+- Added [RxCollection.count()](https://rxdb.info/rx-query.html#count) queries. [#4096](https://github.com/pubkey/rxdb/pull/4096)
+- REFACTOR index boundary usage for better performance.
+- FIX critical bug in query correctness. **IMPORTANT:** If you use the RxStorage [IndexedDB](https://rxdb.info/rx-storage-indexeddb.html) or [FoundationDB](https://rxdb.info/rx-storage-foundationdb.html), you have to rebuild the indexes by increasing your schema version and running a migration. [#4098](https://github.com/pubkey/rxdb/pull/4098)
+- FIX Typo in CRDT Plugin: `RxDDcrdtPlugin` is now `RxDBcrdtPlugin` [#4094](https://github.com/pubkey/rxdb/pull/4094) Thanks [@jwallet](https://github.com/jwallet)
+
+### 13.7.0 (24 October 2022)
+
+- ADD [CRDT Plugin](./docs-src/crdt.md)
+- FIX calling `.remove()` on an `RxDocument` must update the internal data of the document with the deleted state.
+- FIX Stop retries when replication gets canceled [#4088](https://github.com/pubkey/rxdb/pull/4088) Thanks [@Whoops](https://github.com/Whoops)
+
+### 13.6.0 (19 October 2022)
+
+- ADD example [how to use RxDB with Flutter](https://github.com/pubkey/rxdb/tree/master/examples/flutter)
+- FIX many typos from the [TYPOFIX event](https://github.com/pubkey/rxdb/issues/4024)
+- FIX Cannot read properties of null [#4055](https://github.com/pubkey/rxdb/pull/4055) Thanks [@Albert-Gao](https://github.com/Albert-Gao)
+- FIX(sqlite) do not run pragma inside of transaction
+
+### 13.5.1 (15 October 2022)
+
+- ADD in `fastUnsecureHash()` use polyfill if `TextEncoder` is not available
+
+### 13.5.0 (12 October 2022)
+
+- FIX many typos from the [TYPOFIX event](https://github.com/pubkey/rxdb/issues/4024)
+- FIX `lastOfArray()` may return undefined if array is empty [#4011](https://github.com/pubkey/rxdb/pull/4011) Thanks [@AlexErrant](https://github.com/AlexErrant)
+- FIX Remove legacy triple slash directives [#4023](https://github.com/pubkey/rxdb/pull/4023) Thanks [@jeromepochat](https://github.com/jeromepochat)
+- FIX randomly failing replication test
+
+### 13.4.5 (7 October 2022)
+
+- REFACTORED the landingpage to have less blinking and no more autoplay audio.
+
+### 13.4.4 (4 October 2022)
+
+- ADD new premium plugin `RxStorage Localstorage Meta Optimizer`
+
+### 13.4.2 (3 October 2022)
+
+### 13.4.1 (2 October 2022)
+
+- REFACTOR stuff for a new optimization plugin
+
+### 13.4.0 (28 September 2022)
+
+- FIX image attachments not working correctly in the browser
+- FIX Push batchSize in not respected [#3994](https://github.com/pubkey/rxdb/issues/3994)
+- FIX boolean indexes not working [#3994](https://github.com/pubkey/rxdb/issues/3994)
+
+### 13.3.0 (26 September 2022)
+
+- FIX(sqlite) use dollar params instead of named params
+- CHANGE run performance tests without the `dev-mode` plugin
+- IMPROVE performance of document writes by not using try-catch in a hot path.
+- FIX `RxDatabase.remove()` must properly remove the collection storage together with the replication states.
+
+### 13.2.0 (22 September 2022)
+
+- FIX respect the `prefers-reduced-motion` media query to not show blinking animations to neurodiverse people at the landingpage.
+- ADD `pull.responseModifier` to the graphql replication plugin so that you can aggregate the checkpoint from the returned graphql response.
+
+### 13.1.0 (19 September 2022)
+
+- FIX saving multiple attachments broke previously stored attachments on some storages.
+- UPDATE graphql websocket dependencies [#3980](https://github.com/pubkey/rxdb/pull/3980) Thanks [@herefishyfish](https://github.com/herefishyfish)
+- FIX on `RxCollection.remove()` the related storages like the meta of replications, must also be removed.
+
+### 13.0.3 (17 September 2022)
+
+- FIX sorting via `event-reduce` did not work when `key-compression` plugin was used.
+
+### 13.0.2 (16 September 2022)
+
+- FIX `event-reduce` did not work when `key-compression` plugin was used.
+
+### 13.0.1 (16 September 2022)
+
+### 13.0.0 (16 September 2022) BREAKING [read the announcement](./docs-src/releases/13.0.0.md)
+
+- FIX `graphQLSchemaFromRxSchema()` must not create broken schema when there are no `headerFields`
+
+- ADD credentials settings to the GraphQL replication plugin [#3976](https://github.com/pubkey/rxdb/pull/3976) Thanks [@marcoklein](https://github.com/marcoklein)
+
+- RENAMED the `ajv-validate` plugin to `validate-ajv` to be in equal with the other validation plugins.
+- The `is-my-json-valid` validation is no longer supported until [this bug](https://github.com/mafintosh/is-my-json-valid/pull/192) is fixed.
+- REFACTORED the [schema validation plugins](./docs-src/schema-validation.md), they are no longer plugins but now they get wrapped around any other RxStorage.
+  - It allows us to run the validation inside of a [Worker RxStorage](./docs-src/rx-storage-worker.md) instead of running it in the main JavaScript process.
+  - It allows us to configure which `RxDatabase` instance must use the validation and which does not. In production it often makes sense to validate user data, but you might not need the validation for data that is only replicated from the backend.
+- REFACTORED the [key compression plugin](./docs-src/key-compression.md), it is no longer a plugin but now a wrapper around any other RxStorage.
+  - It allows to run the key-comresion inside of a [Worker RxStorage](./docs-src/rx-storage-worker.md) instead of running it in the main JavaScript process.
+
+- REFACTORED the encryption plugin, it is no longer a plugin but now a wrapper around any other RxStorage.
+  - It allows to run the encryption inside of a [Worker RxStorage](./docs-src/rx-storage-worker.md) instead of running it in the main JavaScript process.
+  - It allows do use asynchronous crypto function like [WebCrypto](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
+- Store the password hash in the same write request as the database token to improve performance.
+
+- REMOVED many unused plugin hooks because they decreased the performance.
+
+- REMOVED support for temporary documents [see here](https://github.com/pubkey/rxdb/pull/3777#issuecomment-1120669088)
+- REMOVED RxDatabase.broadcastChannel The broadcast channel has been moved out of the RxDatabase and is part of the RxStorage. So it is not longer exposed via `RxDatabase.broadcastChannel`.
+
+- In the RxDB internal `_meta.lwt` field, we now use 2 decimals number of the unix timestamp in milliseconds.
+
+- REMOVE RxStorageStatics `.hash` and `.hashKey`
+
+- CHANGE removed default usage of `md5` as default hashing. Use a faster non-cryptographic hash instead.
+  - ADD option to pass a custom hash function when calling `createRxDatabase`.
+
+- Removed the `liveInterval` option of the replication. It was an edge case feature with wrong defaults. If you want to run the pull replication on internval, you can send a `RESYNC` event manually in a loop.
+
+- CHANGE use `Float` instead of `Int` to represent timestamps in GraphQL.
+
+- REPLACED `RxReplicationPullError` and `RxReplicationPushError` with normal `RxError` like in the rest of the RxDB code.
+- REMOVED the option to filter out replication documents with the push/pull modifiers [#2552](https://github.com/pubkey/rxdb/issues/2552) because this does not work with the new replication protocol.
+- CHANGE default of replication `live` to be set to `true`. Because most people want to do a live replication, not a one time replication.
+
+- CHANGED Attachment data is now always handled as `Blob` because Node.js does support `Blob` since version 18.0.0 so we no longer have to use a `Buffer` but instead can use Blob for browsers and Node.js
+- FIXED multiple problems with encoding attachments data. We now use the `js-base64` library which properly handles utf-8/binary/ascii transformations.
+
+- RENAMED the `server` plugin is now called `server-couchdb` and `RxDatabase.server()` is now `RxDatabase.serverCouchDB()`
+- ADDED the [websocket replication plugin](./docs-src/replication-websocket.md)
+- ADDED the [FoundationDB RxStorage](./docs-src/rx-storage-foundationdb.md)
+
+- FIX `couchdb-server` plugin missed out events from the replication.
+
+- ADD Support JsonSchema for nested additionalProperties [#3952](https://github.com/pubkey/rxdb/pull/3952) Thanks [@swnf](https://github.com/swnf)
+
+- REFACTORED the layout of `RxChangeEvent` to better match the RxDB requirements and to fix the 'deleted-document-is-modified-but-still-deleted' bug.
+
+### 12.7.16 (18 July 2022)
+
+### 12.7.15 (18 July 2022)
+
+### 12.7.14 (18 July 2022)
+
+### 12.7.13 (18 July 2022)
+
+### 12.7.12 (17 July 2022)
+
+- CHANGE use eslint rule `require-await` to reduce build size.
+
+### 12.7.11 (17 July 2022)
+
+### 12.7.10 (17 July 2022)
+
+### 12.7.9 (17 July 2022)
+
+### 12.7.8 (15 July 2022)
+
+### 12.7.7 (15 July 2022)
+
+### 12.7.6 (15 July 2022)
+
+### 12.7.5 (15 July 2022)
+
+- FIX unify checkpoint behavior across all RxStorage implementations.
+- FIX github release bot to only post non-patch releases to discord.
+
+### 12.7.4 (15 July 2022)
+
+- ADD export type `CategorizeBulkWriteRowsOutput`
+- CHANGE `RxStorageInstance.getChangedDocumentsSince()` only returns the last checkpoint, not one for each document.
+
+### 12.7.3 (14 July 2022)
+
+- ADD export type `RxStorageDefaultCheckpoint`
+
+### 12.7.2 (14 July 2022)
+
+### 12.7.1 (14 July 2022)
+
+### 12.7.0 (14 July 2022)
+
+- FIX [#3839](https://github.com/pubkey/rxdb/pull/3839) executing insert -> remove -> insert -> remove does not work. Thanks [@nisarpeitang](https://github.com/nisarpeitang)
+- ADD `checkpoint` to the internal used events that are emitted in the `RxStorageInstance.changestream()`.
+- FIX randomly failing test with dexie.js RxStorage.
+- ADD `custom` parameter to `RxStorageInstance.bulkWrite()`
+
+### 12.6.14 (7 July 2022)
+
+- Moved from gitter to [discord](https://discord.gg/gNAuePsN)
+- ADD `bulkSize` option to [Memory Synced RxStorage](https://rxdb.info/rx-storage-memory-synced.html)
+
+### 12.6.13 (6 July 2022)
+
+- ADD `getPouchDBOfRxCollection()` to easy access the PouchDB instance of a RxCollection.
+
+### 12.6.11 (5 July 2022)
+
+- Add the [Memory Synced RxStorage](https://rxdb.info/rx-storage-memory-synced.html) to the premium plugins.
+
+### 12.6.10 (5 July 2022)
+
+### 12.6.9 (4 July 2022)
+
+- Add conflict handling to RxCollection.
+
+### 12.6.8 (2 July 2022)
+
+### 12.6.7 (1 July 2022)
+
+### 12.6.6 (1 July 2022)
+
+### 12.6.5 (30 June 2022)
+
+- ADD `isRxDatabaseFirstTimeInstantiated()`
+
+### 12.6.4 (30 June 2022)
+
+### 12.6.3 (29 June 2022)
+
+### 12.6.2 (29 June 2022)
+
+### 12.6.1 (29 June 2022)
+
+- FIX RxStorageReplication must work with local documents.
+
+### 12.6.0 (29 June 2022)
+
+- The worker RxStorage will no longer reuse the worker so that multiple RxDatabase instances can use different workers for better performance.
+- Cross-Tab event propagation is now handled by the RxStorage implementations, not by the RxDatabase. This allows to better combine RxStorages and plugins/wrappers.
+
+### 12.5.4 (23 June 2022)
+
+- Only check if final field have been changed in dev-mode.
+- Fix `atomicUpsert()` broken when document was replicated before. [#3856](https://github.com/pubkey/rxdb/pull/3856). Thanks [@AntonOfTheWoods](https://github.com/AntonOfTheWoods)
+- Refactor revision handling
+- Fix the `_rev` that is passed to an RxStorage must be respected by the RxStorage.
+
+### 12.5.3 (15 June 2022)
+
+### 12.5.1 (15 June 2022)
+
+### 12.5.0 (15 June 2022)
+
+- UPDATE Node.js to version `18.3.0`
+- FIX: RxStorage should never emit an eventBulk with an empty events array.
+- Update PouchDB to `7.3.0` Thanks [@cetsupport](https://github.com/cetsupport).
+- CHANGE (RxStorage) revision hash must not include the `_meta` field.
+- Added new Stream replication for internal usage in plugins.
+
+### 12.4.3 (27 May 2022)
+
+- SQLite RxStorage: Add support for specific query indexes.
+
+### 12.4.2 (23 May 2022)
+
+- FIX query planner did not pick the correct index on `$eq` operations.
+- IMPROVE performance of the memory RxStorage
+- IMPROVE performance of custom index creation
+
+### 12.4.1 (12 May 2022)
+
+- ADD query optimizer to premium plugins.
+
+### 12.4.0 (12 May 2022)
+
+- REFACTOR if no sort order is set on a query, use a better matching sort order and not just the primary key.
+
+### 12.3.2 (10 May 2022)
+
+### 12.3.1 (10 May 2022)
+
+### 12.3.0 (10 May 2022)
+
+- OPTIMIZE `isFindOneByIdQuery()` should be `true` when only the primary field is queried with an `$eq`
+- REWRITE query planner to use better indexeses in dexie.js and memory storage.
+
+### 12.2.0 (9 May 2022)
+
+- ADD attachment support to SQLite `RxStorage`
+- ADD attachment support to IndexedDB `RxStorage`
+- FIX collections with a dash in the name where not properly removed [#3785](https://github.com/pubkey/rxdb/pull/3785) Thanks [@mmouterde](https://github.com/mmouterde)
+- FIX data still there despite remove and destroy calls [#3788](https://github.com/pubkey/rxdb/pull/3788) Thanks [@mmouterde](https://github.com/mmouterde)
+
+### 12.1.0 (6 May 2022)
+
+- ADD `notifyAboutRemoteChange()` to the GrapQL replication and replication primitives.
+- ADD attachment support to memory `RxStorage`.
+- FIX default of `waitForLeadership` in replication primitives must be `true`
+
+### 12.0.8 (4 May 2022)
+
+- IMPROVE memory storage performance.
+
+### 12.0.7 (3 May 2022)
+
+### 12.0.6 (3 May 2022)
+
+### 12.0.5 (3 May 2022)
+
+### 12.0.4 (3 May 2022)
+
+### 12.0.3 (3 May 2022)
+
+### 12.0.2 (2 May 2022)
+
+- FIX dexie.js storage does not work with keyCompression when having a nested schema.
+
+### 12.0.1 (28 April 2022)
+
+- Added `autoStart` option to the replication plugins [#3775](https://github.com/pubkey/rxdb/pull/3775) Thanks [@mmouterde](https://github.com/mmouterde)
+- Fix [#778](https://github.com/pubkey/rxdb/pull/3778) Storing string array was broken in the dexie storage. Thanks [@mmouterde](https://github.com/mmouterde)
+
+### 12.0.0 (26 April 2022) BREAKING [read the announcement](./docs-src/releases/12.0.0.md)
+
+- All indexes that do not contain the primaryKey, get the primary key added.
+- You can now set a custom index when doing a query.
+- Unified the replication primitives and the GraphQL replication plugin.
+- Removed the deprecated in-memory plugin.
+- Added cleanup plugin
+- Refactor local documents plugin to only create a storage instance for local documents when needed.
+- Removed the `core` plugin. The default export `from 'rxdb'` now exports only the RxDB core without plugins.
+
+- The Dexie.js RxStorage is no longer in beta mode.
+- Added the in memory storage plugin.
+- Added `RxDocument().toMutableJSON()`
+- Added `RxCollection().bulkUpsert()`
+- Added optional `init()` function to `RxPlugin`.
+- dev-mode: Add check to ensure all top-level fields in a query are defined in the schema.
+- Support for array field based indexes like `data.[].subfield` was removed, as it anyway never really worked.
+- Refactored the usage of RxCollection.storageInstance to ensure all hooks run properly.
+- Refactored the encryption plugin so no more plugin specific code is in the RxDB core.
+- Removed the encrypted export from the json-import-export plugin. This was barely used and made everything more complex. All exports are no non-encrypted. If you need them encrypted, you can still run by encryption after the export is done.
+- RxPlugin hooks now can be defined as running `before` or `after` other plugin hooks.
+- Attachments are now internally handled as string instead of `Blob` or `Buffer`
+- Fix (replication primitives) only drop pulled documents when a relevant document was changed locally.
+- Fix dexie.js was not able to query over an index when `keyCompression: true`
+
+Changes to `RxStorageInterface`:
+- `RxStorageInstance` must have the `RxStorage` in the `storage` property.
+- The `_deleted` field is now required for each data interaction with `RxStorage`.
+- Removed `RxStorageInstance.getChangedDocuments()` and added `RxStorageInstance.getChangedDocumentsSince()` for better performance.
+- Added `doesBroadcastChangestream()` to `RxStorageStatics`
+- Added `withDeleted` parameter to `RxStorageKeyObjectInstance.findLocalDocumentsById()`
+- Added internal `_meta` property to stored document data that contains internal document related data like last-write-time and replication checkpoints.
+
+### 11.6.0 (4 February 2022)
+
+Bugfixes:
+  - [#3666](https://github.com/pubkey/rxdb/issues/3666) RxDB with lokijs works bad in Safari and FF when using multiple tabs
+
+Other:
+  - Replication primitives must throw an error if `_deleted` field is missing. [#3671](https://github.com/pubkey/rxdb/pull/3671)
+
+### 11.5.1 (30 January 2022)
+
+Bugfixes:
+  - `RxStorage.statics.getQueryMatcher()` must not match documents with `_deleted: true`.
+  - Fixed multiple problems with `RxCollection.findByIds$()` [#3659](https://github.com/pubkey/rxdb/pull/3659) Thanks [@Hideman85](https://github.com/Hideman85)
+
+### 11.5.0 (30 January 2022)
+
+Features:
+  - Improve emitted errors of the GraphQL replication [#3630](https://github.com/pubkey/rxdb/pull/3630) Thanks [@nirvdrum](https://github.com/nirvdrum)
+  - Added Dexie.js based `RxStorage`. [Read the docs](https://rxdb.info/rx-storage-dexie.html)
+
+### 11.4.0 (28 January 2022)
+
+Bugfixes:
+  - `RxDocument.toJSON()` is leaking meta field `_deleted`. [#3645](https://github.com/pubkey/rxdb/pull/3645) Thanks [@Bessonov](https://github.com/Bessonov)
+
+Features:
+  - Allow truthy values for the GraphQL replication `deletedFlag` field. [#3644](https://github.com/pubkey/rxdb/pull/3644) Thanks [@nirvdrum](https://github.com/nirvdrum)
+
+Other:
+  - `.findOne(documentId)` should use `RxStorage().findDocumentsById()` instead of `RxStorage().query()`
+
+### 11.3.0 (17 January 2022)
+
+Bugfixes:
+  - GraphQL replication: Unnecessary local document writes fill up the database [#3627](https://github.com/pubkey/rxdb/pull/3627) Thanks [@hdwatts](https://github.com/hdwatts)
+
+### 11.2.0 (12 January 2022)
+
+Bugfixes:
+  - Replication Primitives: Local writes while running the `pull` must not be lost but send to the remote.
+  - Replication Primitives: Should not stack up failed runs and then run many times.
+  - Support composite indices in schema literal types [#3609](https://github.com/pubkey/rxdb/pull/3609) Thanks [@nirvdrum](https://github.com/nirvdrum)
+
+### 11.1.0 (6 January 2022)
+
+Features:
+  - Added `toTypedRxJsonSchema` and `ExtractDocumentTypeFromTypedRxJsonSchema` to generate the document types from the schema.
+
+### 11.0.0 (3 January 2022) BREAKING [read the announcement](./docs-src/releases/11.0.0.md)
+
+BREAKING:
+  - RxStorage: The non async functions `prepareQuery`, `getSortComparator` and `getQueryMatcher` have been moved out of `RxStorageInstance` into `RxStorage`. This was needed to have better WebWorker support. This will not affect you do not use a custom `RxStorage` implementation.
+  - LokiJS: Do not use the `IdleQueue` of the RxDatabase to handle calls to saveDatabase(), instead wait for CPU idleness of the JavaScript process.
+  - `RxStorageInterface`:
+    - Replaced all `Map` with plain json objects so that they can be `JSON.stringify`-ed
+    - Replaced typings of event stream to use `EventBulk` and process events in bulks to save performance.
+    - Move all static methods into the `statics` property so we can code-split when using the worker plugin.
+    - `digest` and `length` of attachment data is now created by RxDB, not by the RxStorage. [#3548](https://github.com/pubkey/rxdb/issues/3548)
+    - Added the statics `hashKey` property to identify the used hash function.
+  - Internally all events are handles via bulks, this saves performance when events are transfered over a WebWorker or a BroadcastChannel.
+  - Removed the deprecated `recieved` methods, use `received` instead. [See #3392](https://github.com/pubkey/rxdb/pull/3392)
+  - Removed the `no-validate` plugin. To use RxDB without schema validation, just do not add a validation plugin to your custom build.
+
+Bugfixes:
+  - Do not throw an error when database is destroyed while a GraphQL replication is running.
+  - Compound primary key migration throws "Value of primary key(s) cannot be changed" [#3546](https://github.com/pubkey/rxdb/pull/3546) Thanks [@nothingkid](https://github.com/nothingkid)
+  - Allow `_id` as primaryKey [#3562](https://github.com/pubkey/rxdb/pull/3562) Thanks [@SuperKirik](https://github.com/SuperKirik)
+  - LokiJS: Remote operations do never resolve when remote instance was leader and died.
+
+Other:
+  - LokiJS: All documents are stored with a `$lastWriteAt` field, so we can implement an auto compaction later.
+  - Transpile `async`/`await` to promises instead of generators. via [babel-plugin-transform-async-to-promises](https://github.com/rpetrich/babel-plugin-transform-async-to-promises)
+
+### 10.5.4 (30 November 2021)
 
 Bugfixes:
   - LokiJS: Do not call `saveDatabase()` when no persistence adapter is given.
@@ -49,7 +1230,7 @@ Bugfixes:
   - LokiJS: Ensure events emit exact the same data as with PouchDB.
   - LokiJS: Queries with limit and skip where broken.
   - LokiJS: Fix all bugs and run the whole test suite with LokiJS Storage
-  - Fix PouchDB RxStorage returned sometimes wrong sort comparison results.
+  - Fix PouchDB RxStorage sometimes returned wrong sort comparison results.
 
 Other:
   - Updated [event-reduce](https://github.com/pubkey/event-reduce) for more optimizations.
@@ -72,6 +1253,7 @@ Bugfixes:
 
 Bugfixes:
   - LokiJS Storage must have a deterministic sort order.
+
 ### 10.3.2 (5 November 2021)
 
 Bugfixes:
@@ -93,7 +1275,6 @@ Bugfixes:
 Other:
   - Improved performance of write operations.
   - Removed unnecessary abstraction layer of `LeaderElector`
-
 
 ### 10.2.2 (25 October 2021)
 
@@ -139,7 +1320,7 @@ Bugfixes:
   - Calling bulk-methods with an empty array must not throw an error.
   - `RxCollection.remove()` does not delete local documents [#3319](https://github.com/pubkey/rxdb/issues/3319)
 
-### 10.0.0 (20 July 2021) BREAKING [read the announcement](./orga/releases/10.0.0.md)
+### 10.0.0 (20 July 2021) BREAKING [read the announcement](./docs-src/releases/10.0.0.md)
 
 Breaking:
   - Setting a `primaryKey` for a schema is now required.
@@ -154,19 +1335,16 @@ Breaking:
   - Removed the deprecated `atomicSet()`, use `atomicPatch()` instead.
   - Removed the deprecated `RxDatabase.collection()` use `RxDatabase().addCollections()` instead.
 
-
   - Moved everything pouchdb related to the `pouchdb` plugin.
   - Pouchdb plugins are not longer added via `addRxPlugin()` but `addPouchPlugin()`. (RxDB plugins are still added via `addRxPlugin`).
   - Removed plugin hook `preCreatePouchDb`.
   - Removed the `watch-for-changes` plugin, this is now directly integrated into the pouchdb `RxStorage`.
-  - Removed the `adapter-check` plugin. (The function `adapterCheck` is move to the pouchdb plugin).
-
+  - Removed the `adapter-check` plugin. (The function `adapterCheck` has moved to the pouchdb plugin).
 
   - Calling `RxDatabase.server()` now returns a promise that resolves when the server is started up.
   - Changed the defaults of `PouchDBExpressServerOptions` from the `server()` method, by default we now store logs in the tmp folder and the config is in memory.
   - Renamed `replication`-plugin to `replication-couchdb` to be more consistend in naming like with `replication-graphql`
     - Renamed `RxCollection().sync()` to `RxCollection().syncCouchDB()`
-
 
   - Renamed the functions of the json import/export plugin to be less confusing
     - `dump()` is now `exportJSON()`
@@ -190,7 +1368,6 @@ Features:
 Types:
   - `getLocal()` can return `undefined`. Thanks [@chrisdrackett](https://github.com/chrisdrackett)
   - Fixed typings in the dependencies so you can use `noUncheckedIndexedAccess`. Thanks [@seanwu1105](https://github.com/seanwu1105)
-
 
 ### 9.20.0 (15 May 2021)
 
@@ -399,7 +1576,6 @@ Bugfixes:
 Other:
   - Added `"sideEffects": false` to all plugins
 
-
 ### 9.1.0 (31 May 2020)
 
 Features:
@@ -411,7 +1587,7 @@ Bugfixes:
 Other:
   - Added webpack [tree shaking optimization](https://webpack.js.org/guides/tree-shaking/#clarifying-tree-shaking-and-sideeffects) via `sideEffects: false`
 
-### 9.0.0 (16 May 2020) BREAKING [read the announcement](./orga/releases/9.0.0.md)
+### 9.0.0 (16 May 2020) BREAKING [read the announcement](./docs-src/releases/9.0.0.md)
 
 Features:
   - Added `RxQuery.exec(throwIfMissing: true)`
@@ -517,20 +1693,12 @@ Other:
   - Fix GraphQL-example to propper use Websocket-Pub-Sub
 
 ### 8.6.0 (4 October 2019)
-Migrated to typescript.
 
-### 8.5.0-beta.3 (1 October 2019)
-
-  - Fixed import of `@types/pouchdb-core` and `@types/pouchdb-find`
-
-### 8.5.0-beta.2 (1 October 2019)
+- Migrated to typescript.
+- Fixed import of `@types/pouchdb-core` and `@types/pouchdb-find`
 
 Bugfixes:
   - Fixed typings of `preCreateRxCollection` [#1533](https://github.com/pubkey/rxdb/issues/1533) Thanks [@yanshiyason](https://github.com/yanshiyason)
-
-### 8.5.0-beta.1 (30 September 2019)
-
-Migrated to typescript.
 
 ### 8.5.0 (18 September 2019)
 
@@ -643,7 +1811,7 @@ Bugfixes:
 Bugfixes:
   - Does not compile in TypeScript with strict flag enabled [#448](https://github.com/pubkey/rxdb/issues/448)
 
-### 8.0.0 (18. September 2018) BREAKING [read the announcement](./orga/releases/8.0.0.md)
+### 8.0.0 (18. September 2018) BREAKING [read the announcement](./docs-src/releases/8.0.0.md)
 
 Breaking:
   - Upgraded to [pouchdb 7.0.0](https://pouchdb.com/2018/06/21/pouchdb-7.0.0.html)
@@ -681,7 +1849,6 @@ Other:
   - Split `RxCollection.watchForChanges()` into own plugin
   - Refactored `RxQuery`
 
-
 ### 7.7.1 (August 1, 2018)
 
 Bugfixes:
@@ -695,7 +1862,6 @@ Other
   - Added more example the the RxQuery-Docs [#740](https://github.com/pubkey/rxdb/pull/740) thanks [@Celludriel](https://github.com/Celludriel)
 
 ### 7.7.0 (July 6, 2018)
-
 
 Bugfixes:
   - Indexes do not work in objects named "properties" [#697](https://github.com/pubkey/rxdb/issues/697)
@@ -946,7 +2112,6 @@ Bugfixes:
 
 **WARNING**: If you use RxDB with angular2||zone.js, you might have the error [_global is not defined](https://github.com/angular/zone.js/issues/835). Wait for the next zone.js release before updating RxDB.
 
-
 ## 5.1.0 (July 10, 2017)
 
 Features:
@@ -1021,7 +2186,6 @@ Features:
 Other:
   - upgraded to pouchdb [v6.2.0](https://pouchdb.com/2017/04/20/pouchdb-6.2.0.html)
   - re-executing queries while nothing happend to the collection, is now fetched
-
 
 ## 3.0.8 (April 20, 2017)
 
@@ -1139,7 +2303,6 @@ Refactor:
 
 Bugfixes:
   - Fixed tests for IE11
-
 
 ## 2.0.0 (January 23, 2017) BREAKING
 

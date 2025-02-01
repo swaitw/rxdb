@@ -1,31 +1,41 @@
-import { RxJsonSchema } from '../../types';
-export declare type Prefixes = {
-    set?: string;
-    feed?: string;
-    changed?: string;
+import type { RxJsonSchema } from '../../types/index.d.ts';
+export type Prefixes = {
+    push?: string;
+    pushRow?: string;
+    checkpoint?: string;
+    pull?: string;
+    pullBulk?: string;
+    stream?: string;
+    headers?: string;
 };
 /**
  * just type some common types
  * to have better IDE autocomplete,
  * all strings are allowed
  */
-export declare type GraphQLParamType = 'ID' | 'ID!' | 'String' | 'String!' | 'Int' | 'Int!' | string;
-export declare type GraphQLSchemaFromRxSchemaInputSingleCollection = {
+export type GraphQLParamType = 'ID' | 'ID!' | 'String' | 'String!' | 'Int' | 'Int!' | 'Float' | 'Float!' | string;
+export type GraphQLSchemaFromRxSchemaInputSingleCollection = {
     schema: RxJsonSchema<any>;
-    deletedFlag: string;
-    feedKeys: string[];
+    /**
+     * These fields of the document data
+     * will be used for the checkpoint.
+     */
+    checkpointFields: string[];
     ignoreInputKeys?: string[];
     ignoreOutputKeys?: string[];
     withRevisions?: boolean;
     prefixes?: Prefixes;
-    subscriptionParams?: {
-        [k: string]: GraphQLParamType;
-    };
+    headerFields?: string[];
+    /**
+     * Name of the boolean field that marks deleted documents.
+     * [default='_deleted']
+     */
+    deletedField?: string;
 };
-export declare type GraphQLSchemaFromRxSchemaInput = {
+export type GraphQLSchemaFromRxSchemaInput = {
     [collectionName: string]: GraphQLSchemaFromRxSchemaInputSingleCollection;
 };
-export declare type GraphQLSchemaFromRxSchemaOutput = {
+export type GraphQLSchemaFromRxSchemaOutput = {
     asString: string;
     queries: string[];
     mutations: string[];
@@ -35,9 +45,7 @@ export declare type GraphQLSchemaFromRxSchemaOutput = {
 };
 export declare const SPACING = "  ";
 /**
- * TODO this is in beta mode,
- * use it at your own risk.
- * Fix bugs when you find them.
+ * Create a GraphQL schema from a given RxJsonSchema
  */
 export declare function graphQLSchemaFromRxSchema(input: GraphQLSchemaFromRxSchemaInput): GraphQLSchemaFromRxSchemaOutput;
 export declare function fillUpOptionals(input: GraphQLSchemaFromRxSchemaInputSingleCollection): GraphQLSchemaFromRxSchemaInputSingleCollection;

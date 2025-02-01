@@ -15,21 +15,21 @@ export type BackupOptions = {
      * If not set, all collections will be backed up.
      */
     collections?: string[];
-}
+};
 
 export type BackupMetaFileContent = {
     createdAt: number;
     updatedAt: number;
     collectionStates: {
         [collectionName: string]: {
-            lastSequence: number;
-        }
-    }
-}
+            checkpoint?: any;
+        };
+    };
+};
 
 export type RxBackupWriteEvent = {
     collectionName: string;
     documentId: string;
     files: string[];
     deleted: boolean;
-}
+};

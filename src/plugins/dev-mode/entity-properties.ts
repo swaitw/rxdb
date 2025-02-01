@@ -1,6 +1,6 @@
-import { RxCollectionBase } from '../../rx-collection';
-import { RxDatabaseBase } from '../../rx-database';
-import { createRxDocumentConstructor, basePrototype } from '../../rx-document';
+import { RxCollectionBase } from '../../rx-collection.ts';
+import { RxDatabaseBase } from '../../rx-database.ts';
+import { createRxDocumentConstructor, basePrototype } from '../../rx-document.ts';
 
 /**
  * returns all possible properties of a RxCollection-instance
@@ -25,8 +25,6 @@ export function rxCollectionProperties(): string[] {
 let _rxDatabaseProperties: string[];
 export function rxDatabaseProperties(): string[] {
     if (!_rxDatabaseProperties) {
-        // TODO instead of using the pseudoInstance,
-        // we should get the properties from the prototype of the class
         const pseudoInstance: RxDatabaseBase<any, any> = new (RxDatabaseBase as any)(
             'pseudoInstance',
             'memory'
@@ -36,7 +34,7 @@ export function rxDatabaseProperties(): string[] {
             Object.getPrototypeOf(pseudoInstance)
         );
         _rxDatabaseProperties = [...ownProperties, ...prototypeProperties];
-        pseudoInstance.destroy();
+        pseudoInstance.close();
     }
     return _rxDatabaseProperties;
 }

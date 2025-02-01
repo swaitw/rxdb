@@ -1,13 +1,14 @@
 import type {
     RxJsonSchema,
     RxDocument,
-    MigrationStrategies
-} from './';
+    MigrationStrategies,
+    RxConflictHandler
+} from './index.d.ts';
 import type {
     RxCollectionBase
-} from '../rx-collection';
-import type { QueryCache } from '../query-cache';
-import { RxLocalDocumentMutation } from './rx-database';
+} from '../rx-collection.d.ts';
+import type { QueryCache } from '../query-cache.d.ts';
+import type { RxLocalDocumentMutation } from './rx-database.d.ts';
 
 export interface KeyFunctionMap {
     [key: string]: Function;
@@ -19,11 +20,11 @@ export interface NumberFunctionMap {
 
 /**
  * Params to create a new collection.
- * Notice the name of the collection is set onle level higher
+ * Notice the name of the collection is set one level higher
  * when calling addCollections()
  */
-export type RxCollectionCreator = {
-    schema: RxJsonSchema<any>;
+export type RxCollectionCreator<RxDocType = any> = {
+    schema: RxJsonSchema<RxDocType>;
     instanceCreationOptions?: any;
     migrationStrategies?: MigrationStrategies;
     autoMigrate?: boolean;
@@ -31,74 +32,80 @@ export type RxCollectionCreator = {
     methods?: KeyFunctionMap;
     attachments?: KeyFunctionMap;
     options?: any;
+    /**
+     * Set this to true if you want to store local documents
+     * in the RxCollection instance.
+     */
+    localDocuments?: boolean;
     cacheReplacementPolicy?: RxCacheReplacementPolicy;
-}
 
-export interface MigrationState {
-    done: boolean; // true if finished
-    total: number; // will be the doc-count
-    handled: number; // amount of handled docs
-    success: number; // handled docs which successed
-    deleted: number; // handled docs which got deleted
-    percent: number; // percentage
-}
-
+    /**
+     * Depending on which plugins or storage is used,
+     * the RxCollection might need a way to resolve conflicts
+     * which is done by this conflict handler.
+     * If no conflict handler is provided, a master-always-wins handler
+     * will be used as default
+     */
+    conflictHandler?: RxConflictHandler<RxDocType>;
+};
 
 export type RxCacheReplacementPolicy = (collection: RxCollection, queryCache: QueryCache) => void;
 
 export type RxCollectionHookCallback<
     RxDocumentType,
-    OrmMethods
-    > = (
-        data: RxDocumentType,
-        instance: RxDocument<RxDocumentType, OrmMethods>
-    ) => void | Promise<void> | any;
-export type RxCollectionHookNoInstance<RxDocumentType, OrmMethods> = (data: RxDocumentType) => void | Promise<void> | any;
-export type RxCollectionHookCallbackNonAsync<RxDocumentType, OrmMethods> = (
+    OrmMethods,
+    Reactivity
+> = (
     data: RxDocumentType,
-    instance: RxDocument<RxDocumentType, OrmMethods>
+    instance: RxDocument<RxDocumentType, OrmMethods, Reactivity>
+) => void | Promise<void> | any;
+export type RxCollectionHookNoInstance<RxDocumentType> = (data: RxDocumentType) => void | Promise<void> | any;
+export type RxCollectionHookCallbackNonAsync<RxDocumentType, OrmMethods, Reactivity> = (
+    data: RxDocumentType,
+    instance: RxDocument<RxDocumentType, OrmMethods, Reactivity>
 ) => void | any;
 export type RxCollectionHookNoInstanceCallback<
     RxDocumentType,
-    OrmMethods
-    > = (
-        data: RxDocumentType,
-        instance: RxCollection<RxDocumentType, OrmMethods>
-    ) => Promise<void> | void | any;
+    OrmMethods,
+    Reactivity
+> = (
+    data: RxDocumentType,
+    instance: RxCollection<RxDocumentType, OrmMethods, Reactivity>
+) => Promise<void> | void | any;
 
 export type RxCollection<
     RxDocumentType = any,
     OrmMethods = {},
     StaticMethods = {},
-    InstanceCreationOptions = {}
-    > = StaticMethods &
-    RxCollectionBase<InstanceCreationOptions, RxDocumentType, OrmMethods> &
-    RxCollectionGenerated<RxDocumentType, OrmMethods>;
+    InstanceCreationOptions = {},
+    Reactivity = unknown
+> = StaticMethods &
+    RxCollectionBase<InstanceCreationOptions, RxDocumentType, OrmMethods, StaticMethods, Reactivity> &
+    RxCollectionGenerated<RxDocumentType, OrmMethods, Reactivity>;
 
-export interface RxCollectionGenerated<RxDocumentType = any, OrmMethods = {}> extends RxLocalDocumentMutation<RxCollection<RxDocumentType, OrmMethods>> {
+export interface RxCollectionGenerated<RxDocumentType = any, OrmMethods = {}, Reactivity = unknown> extends RxLocalDocumentMutation<RxCollection<RxDocumentType, OrmMethods, any, any, Reactivity>> {
 
     // HOOKS
-    preInsert(fun: RxCollectionHookNoInstanceCallback<RxDocumentType, OrmMethods>, parallel: boolean): void;
-    preSave(fun: RxCollectionHookCallback<RxDocumentType, OrmMethods>, parallel: boolean): void;
-    preRemove(fun: RxCollectionHookCallback<RxDocumentType, OrmMethods>, parallel: boolean): void;
-    postInsert(fun: RxCollectionHookCallback<RxDocumentType, OrmMethods>, parallel: boolean): void;
-    postSave(fun: RxCollectionHookCallback<RxDocumentType, OrmMethods>, parallel: boolean): void;
-    postRemove(fun: RxCollectionHookCallback<RxDocumentType, OrmMethods>, parallel: boolean): void;
-    postCreate(fun: RxCollectionHookCallbackNonAsync<RxDocumentType, OrmMethods>): void;
+    preInsert(fun: RxCollectionHookNoInstanceCallback<RxDocumentType, OrmMethods, Reactivity>, parallel: boolean): void;
+    preSave(fun: RxCollectionHookCallback<RxDocumentType, OrmMethods, Reactivity>, parallel: boolean): void;
+    preRemove(fun: RxCollectionHookCallback<RxDocumentType, OrmMethods, Reactivity>, parallel: boolean): void;
+    postInsert(fun: RxCollectionHookCallback<RxDocumentType, OrmMethods, Reactivity>, parallel: boolean): void;
+    postSave(fun: RxCollectionHookCallback<RxDocumentType, OrmMethods, Reactivity>, parallel: boolean): void;
+    postRemove(fun: RxCollectionHookCallback<RxDocumentType, OrmMethods, Reactivity>, parallel: boolean): void;
+    postCreate(fun: RxCollectionHookCallbackNonAsync<RxDocumentType, OrmMethods, Reactivity>): void;
 
     // only inMemory-collections
     awaitPersistence(): Promise<void>;
 }
 
 /**
- * Properties are possibly encrypted so type them as any.
+ * Properties are possibly encrypted so type them as any. TODO this is no longer needed.
  */
 export type RxDumpCollectionAsAny<T> = { [P in keyof T]: any };
 
 interface RxDumpCollectionBase {
-    encrypted: boolean;
     name: string;
-    passwordHash: string | null;
+    passwordHash?: string;
     schemaHash: string;
 }
 export interface RxDumpCollection<RxDocumentType> extends RxDumpCollectionBase {

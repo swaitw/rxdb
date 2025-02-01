@@ -1,46 +1,49 @@
 import assert from 'assert';
 
-import config from './config';
-import * as humansCollection from './../helper/humans-collection';
-import * as schemaObjects from '../helper/schema-objects';
+import {
+    schemaObjects,
+    humansCollection
+} from '../../plugins/test-utils/index.mjs';
+import { describeParallel } from './config.ts';
+
 import AsyncTestUtil from 'async-test-util';
 
-config.parallel('change-event-buffer.test.js', () => {
+describeParallel('change-event-buffer.test.js', () => {
     describe('basic', () => {
         it('should contains some events', async () => {
             const col = await humansCollection.create(10);
-            assert.strictEqual(col._changeEventBuffer.buffer.length, 10);
-            col.database.destroy();
+            assert.strictEqual(col._changeEventBuffer.getBuffer().length, 10);
+            col.database.close();
         });
         it('should delete older events when buffer get over limit', async () => {
             const col = await humansCollection.create(0);
             col._changeEventBuffer.limit = 10;
             await Promise.all(
-                new Array(11).fill(0).map(() => col.insert(schemaObjects.human()))
+                new Array(11).fill(0).map(() => col.insert(schemaObjects.humanData()))
             );
-            assert.strictEqual(col._changeEventBuffer.buffer.length, 10);
+            assert.strictEqual(col._changeEventBuffer.getBuffer().length, 10);
 
             await Promise.all(
-                new Array(11).fill(0).map(() => col.insert(schemaObjects.human()))
+                new Array(11).fill(0).map(() => col.insert(schemaObjects.humanData()))
             );
-            assert.strictEqual(col._changeEventBuffer.buffer.length, 10);
+            assert.strictEqual(col._changeEventBuffer.getBuffer().length, 10);
 
-            col.database.destroy();
+            col.database.remove();
         });
         it('check if correct events get removed', async () => {
             const col = await humansCollection.create(0);
             col._changeEventBuffer.limit = 10;
 
             await Promise.all(
-                new Array(11).fill(0).map(() => col.insert(schemaObjects.human()))
+                new Array(11).fill(0).map(() => col.insert(schemaObjects.humanData()))
             );
 
-            const last = schemaObjects.human();
+            const last = schemaObjects.humanData();
             await col.insert(last);
-            const lastBufferEvent = col._changeEventBuffer.buffer[col._changeEventBuffer.buffer.length - 1];
+            const lastBufferEvent = col._changeEventBuffer.getBuffer()[col._changeEventBuffer.getBuffer().length - 1];
             assert.strictEqual(last.passportId, lastBufferEvent.documentData.passportId);
 
-            col.database.destroy();
+            col.database.remove();
         });
     });
     describe('.getArrayIndexByPointer()', () => {
@@ -48,20 +51,20 @@ config.parallel('change-event-buffer.test.js', () => {
             const col = await humansCollection.create(0);
             col._changeEventBuffer.limit = 10;
             await Promise.all(
-                new Array(11).fill(0).map(() => col.insert(schemaObjects.human()))
+                new Array(11).fill(0).map(() => col.insert(schemaObjects.humanData()))
             );
 
             const pointer = col._changeEventBuffer.getArrayIndexByPointer(0);
             assert.strictEqual(pointer, null);
 
             await Promise.all(
-                new Array(11).fill(0).map(() => col.insert(schemaObjects.human()))
+                new Array(11).fill(0).map(() => col.insert(schemaObjects.humanData()))
             );
 
             const pointer2 = col._changeEventBuffer.getArrayIndexByPointer(10);
             assert.strictEqual(pointer2, null);
 
-            col.database.destroy();
+            col.database.remove();
         });
         it('return the right pointer', async () => {
             const col = await humansCollection.create(0);
@@ -69,21 +72,21 @@ config.parallel('change-event-buffer.test.js', () => {
             col._changeEventBuffer.limit = 10;
 
             await Promise.all(
-                new Array(10).fill(0).map(() => col.insert(schemaObjects.human()))
+                new Array(10).fill(0).map(() => col.insert(schemaObjects.humanData()))
             );
 
             const pointer = col._changeEventBuffer.getArrayIndexByPointer(0);
             assert.strictEqual(pointer, null);
 
             await Promise.all(
-                new Array(10).fill(0).map(() => col.insert(schemaObjects.human()))
+                new Array(10).fill(0).map(() => col.insert(schemaObjects.humanData()))
             );
 
             got = col._changeEventBuffer.getArrayIndexByPointer(15);
             assert.strictEqual(got, 4);
 
             await Promise.all(
-                new Array(10).fill(0).map(() => col.insert(schemaObjects.human()))
+                new Array(10).fill(0).map(() => col.insert(schemaObjects.humanData()))
             );
             got = col._changeEventBuffer.getArrayIndexByPointer(25);
             assert.strictEqual(got, 4);
@@ -91,19 +94,19 @@ config.parallel('change-event-buffer.test.js', () => {
             got = col._changeEventBuffer.getArrayIndexByPointer(21);
             assert.strictEqual(got, 0);
 
-            col.database.destroy();
+            col.database.remove();
         });
         it('return the correct pointer', async () => {
             const col = await humansCollection.create(10);
             col._changeEventBuffer.limit = 10;
 
-            const lastDoc = schemaObjects.human();
+            const lastDoc = schemaObjects.humanData();
             await col.insert(lastDoc);
 
-            const gotIndex: any = col._changeEventBuffer.getArrayIndexByPointer(col._changeEventBuffer.counter);
-            assert.strictEqual(col._changeEventBuffer.buffer[gotIndex].documentData.firstName, lastDoc.firstName);
+            const gotIndex: any = col._changeEventBuffer.getArrayIndexByPointer(col._changeEventBuffer.getCounter());
+            assert.strictEqual(col._changeEventBuffer.getBuffer()[gotIndex].documentData.firstName, lastDoc.firstName);
 
-            col.database.destroy();
+            col.database.remove();
         });
     });
     describe('.runFrom()', () => {
@@ -112,7 +115,7 @@ config.parallel('change-event-buffer.test.js', () => {
             col._changeEventBuffer.limit = 10;
 
             await Promise.all(
-                new Array(10).fill(0).map(() => col.insert(schemaObjects.human()))
+                new Array(10).fill(0).map(() => col.insert(schemaObjects.humanData()))
             );
 
             const evs: any[] = [];
@@ -123,22 +126,22 @@ config.parallel('change-event-buffer.test.js', () => {
             evs.forEach(cE => assert.ok(cE.documentId));
 
 
-            col.database.destroy();
+            col.database.close();
         });
         it('should throw if pointer to low', async () => {
             const col = await humansCollection.create(0);
             col._changeEventBuffer.limit = 10;
 
             await Promise.all(
-                new Array(30).fill(0).map(() => col.insert(schemaObjects.human()))
+                new Array(30).fill(0).map(() => col.insert(schemaObjects.humanData()))
             );
 
             const evs = [];
             assert.throws(() => col._changeEventBuffer.runFrom(5, function (cE: any) {
                 evs.push(cE);
-            }), Error);
+            }));
 
-            col.database.destroy();
+            col.database.remove();
         });
     });
     describe('.getFrom()', () => {
@@ -147,7 +150,7 @@ config.parallel('change-event-buffer.test.js', () => {
             col._changeEventBuffer.limit = 10;
 
             await Promise.all(
-                new Array(10).fill(0).map(() => col.insert(schemaObjects.human()))
+                new Array(10).fill(0).map(() => col.insert(schemaObjects.humanData()))
             );
 
             const evs: any[] = col._changeEventBuffer.getFrom(1) as any;
@@ -155,64 +158,25 @@ config.parallel('change-event-buffer.test.js', () => {
             evs.forEach((cE: any) => assert.ok(cE.documentId));
 
 
-            col.database.destroy();
+            col.database.remove();
         });
         it('should run correct on remove', async () => {
             const col = await humansCollection.create(0);
             const q = col.find();
             await q.exec();
-            await col.insert(schemaObjects.human());
+            await col.insert(schemaObjects.humanData());
             await q.exec();
 
             // remove the doc
             const doc: any = await col.findOne().exec();
             await doc.remove();
-            await AsyncTestUtil.waitUntil(() => col._changeEventBuffer.counter === 2);
+            await AsyncTestUtil.waitUntil(() => col._changeEventBuffer.getCounter() === 2);
 
             const evs: any[] = col._changeEventBuffer.getFrom(q._latestChangeEvent + 1) as any;
             assert.strictEqual(evs.length, 1);
             assert.strictEqual(evs[0].operation, 'DELETE');
 
-            col.database.destroy();
-        });
-    });
-    describe('.reduceByLastOfDoc()', () => {
-        it('should only have the last changeEvent for the doc', async () => {
-            return; // TODO see reduceByLastOfDoc() implementation
-            const col = await humansCollection.create(5);
-            const q = col.find();
-            await q.exec();
-            const oneDoc: any = await col.findOne().exec();
-            let newVal = 0;
-            while (newVal < 5) {
-                newVal++;
-                await oneDoc.atomicPatch({age: newVal});
-            }
-
-            const allEvents: any[] = q.collection._changeEventBuffer.getFrom(1) as any;
-            const reduced = q.collection._changeEventBuffer.reduceByLastOfDoc(allEvents);
-
-            assert.strictEqual(reduced.length, 5);
-            const lastEvent: any = reduced.find(cE => cE.documentId === oneDoc.primary);
-            assert.strictEqual(lastEvent.documentData.age, 5);
-            col.database.destroy();
-        });
-    });
-    describe('.hasChangeWithRevision()', () => {
-        it('should not have a random revision', async () => {
-            const col = await humansCollection.create(5);
-            await col.insert(schemaObjects.human());
-            const has = col._changeEventBuffer.hasChangeWithRevision('1-foobar');
-            assert.strictEqual(has, false);
-            col.database.destroy();
-        });
-        it('should have the revision of the last event', async () => {
-            const col = await humansCollection.create(5);
-            const doc = await col.insert(schemaObjects.human());
-            const lastRev = doc._data._rev;
-            const has = col._changeEventBuffer.hasChangeWithRevision(lastRev);
-            assert.ok(has);
-            col.database.destroy();
+            col.database.remove();
         });
     });
 });

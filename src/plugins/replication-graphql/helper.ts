@@ -1,37 +1,52 @@
-import {
-    hash
-} from '../../util';
+import type { RxGraphQLReplicationClientState, RxGraphQLReplicationQueryBuilderResponseObject } from '../../types/index.d.ts';
+import { ensureNotFalsy, getProperty } from '../../plugins/utils/index.ts';
 
-export const GRAPHQL_REPLICATION_PLUGIN_IDENT = 'rxdbreplicationgraphql';
+export const GRAPHQL_REPLICATION_PLUGIN_IDENTITY_PREFIX = 'graphql';
 
-// does nothing
-export const DEFAULT_MODIFIER = (d: any) => Promise.resolve(d);
+export interface GraphQLError {
+    message: string;
+    locations: Array<{
+        line: number;
+        column: number;
+    }>;
+    path: string[];
+}
+export type GraphQLErrors = Array<GraphQLError>;
 
-/**
- * Returns a new revision key without the revision height.
- * The revision is crafted for the graphql replication
- * and contains the information that this document data was pulled
- * from the remote server and not saved by the client.
- */
-export function createRevisionForPulledDocument(
-    endpointHash: string,
-    doc: any
+
+
+export function graphQLRequest(
+    fetchRequest: WindowOrWorkerGlobalScope['fetch'],
+    httpUrl: string,
+    clientState: RxGraphQLReplicationClientState,
+    queryParams: RxGraphQLReplicationQueryBuilderResponseObject
 ) {
-    const dataHash = hash(doc);
 
-    const ret =
-        dataHash.substring(0, 8) +
-        endpointHash.substring(0, 8) +
-        GRAPHQL_REPLICATION_PLUGIN_IDENT;
+    const headers = new Headers(clientState.headers || {});
+    headers.append('Content-Type', 'application/json');
 
-    return ret;
+    const req = new Request(
+        ensureNotFalsy(httpUrl),
+        {
+            method: 'POST',
+            body: JSON.stringify(queryParams),
+            headers,
+            credentials: clientState.credentials,
+        }
+    );
+    
+    return fetchRequest(req)
+        .then((res) => res.json())
+        .then((body) => {
+            return body;
+        });
 }
 
-export function wasRevisionfromPullReplication(
-    endpointHash: string,
-    revision: string
-) {
-    const ending = endpointHash.substring(0, 8) + GRAPHQL_REPLICATION_PLUGIN_IDENT;
-    const ret = revision.endsWith(ending);
-    return ret;
+export function getDataFromResult(
+    result: { data: object },
+    userDefinedDataPath: string | string[] | undefined
+): any {
+    const dataPath = userDefinedDataPath || ['data', Object.keys(result.data)[0]];
+    const data: any = getProperty(result, dataPath);
+    return data;
 }

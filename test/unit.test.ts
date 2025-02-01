@@ -1,44 +1,73 @@
-import './unit/init.test.js';
-import './unit/util.test.js';
-import './unit/pouch-db-integration.test.js';
-import './unit/adapter-check.test.js';
-import './unit/rx-storage-pouchdb.test.js';
-import './unit/rx-storage-implementations.test.js';
-import './unit/rx-storage-lokijs.test.js';
-import './unit/instance-of-check.test.js';
-import './unit/rx-schema.test.js';
-import './unit/key-compression.test.js';
-import './unit/bug-report.test.js';
-import './unit/rx-database.test.js';
-import './unit/rx-collection.test.js';
-import './unit/rx-document.test.js';
-import './unit/primary.test.js';
-import './unit/temporary-document.test.js';
-import './unit/change-event-buffer.test.js';
-import './unit/cache-replacement-policy.test';
-import './unit/rx-query.test.js';
-import './unit/query-builder.test.js';
-import './unit/idle-queue.test.js';
-import './unit/event-reduce.test.js';
-import './unit/reactive-collection.test.js';
-import './unit/reactive-query.test.js';
-import './unit/reactive-document.test.js';
-import './unit/hooks.test.js';
-import './unit/attachments.test.js';
-import './unit/orm.test.js';
-import './unit/population.test.js';
-import './unit/data-migration.test.js';
-import './unit/backup.test.js';
-import './unit/leader-election.test.js';
-import './unit/replication.test.js';
-import './unit/replication-couchdb.test.js';
-import './unit/replication-graphql.test.js';
-import './unit/encryption.test.js';
-import './unit/import-export.test.js';
-import './unit/cross-instance.test.js';
-import './unit/server.test.js';
-import './unit/mod-encryption.test.js';
-import './unit/local-documents.test.js';
-import './unit/in-memory.test.js';
-import './unit/plugin.test.js';
-import './unit/last.test.js';
+import './unit/init.test.ts';
+import './unit/util.test.ts';
+
+/**
+ * Helpers that
+ * do not fully test RxDB but
+ * just single methods
+*/
+import './unit/custom-index.test.ts';
+import './unit/query-planner.test.ts';
+
+
+import './unit/internal-indexes.test.ts';
+
+
+/**
+ * Move these tests around so that
+ * when you focus on one part of RxDB,
+ * your relevant tests run first.
+ * Do not commit this file if you modified the order.
+ */
+import './unit/rx-storage-implementations.test.ts';
+import './unit/rx-storage-query-correctness.test.ts';
+import './unit/rx-storage-helper.test.ts';
+
+import './unit/rx-storage-dexie.test.ts';
+import './unit/rx-storage-remote.test.ts';
+
+import './unit/instance-of-check.test.ts';
+import './unit/rx-schema.test.ts';
+import './unit/bug-report.test.ts';
+import './unit/rx-database.test.ts';
+import './unit/rx-document.test.ts';
+import './unit/rx-collection.test.ts';
+import './unit/validate.test.ts';
+import './unit/encryption.test.ts';
+import './unit/rx-query.test.ts';
+import './unit/cross-instance.test.ts';
+import './unit/local-documents.test.ts';
+import './unit/change-event-buffer.test.ts';
+import './unit/reactive-query.test.ts';
+import './unit/key-compression.test.ts';
+import './unit/event-reduce.test.ts';
+import './unit/cache-replacement-policy.test.ts';
+import './unit/query-builder.test.ts';
+import './unit/idle-queue.test.ts';
+import './unit/conflict-handling.test.ts';
+import './unit/reactivity.test.ts';
+import './unit/reactive-collection.test.ts';
+import './unit/reactive-document.test.ts';
+import './unit/cleanup.test.ts';
+import './unit/hooks.test.ts';
+import './unit/rx-pipeline.test.ts';
+import './unit/orm.test.ts';
+import './unit/replication-protocol.test.ts';
+import './unit/replication.test.ts';
+import './unit/replication-graphql.test.ts';
+import './unit/replication-websocket.test.ts';
+import './unit/replication-webrtc.test.ts';
+import './unit/rx-state.test.ts';
+import './unit/migration-schema.test.ts';
+import './unit/attachments.test.ts';
+import './unit/attachments-compression.test.ts';
+import './unit/migration-storage.test.ts';
+import './unit/crdt.test.ts';
+import './unit/population.test.ts';
+import './unit/leader-election.test.ts';
+import './unit/backup.test.ts';
+import './unit/import-export.test.ts';
+import './unit/database-lifecycle.ts';
+import './unit/plugin.test.ts';
+
+import './unit/last.test.ts';

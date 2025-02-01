@@ -1,10 +1,10 @@
 import { writable } from 'svelte/store';
-import { createRxDatabase, addRxPlugin } from 'rxdb/plugins/core';
-import { addPouchPlugin, getRxStoragePouch } from 'rxdb/plugins/pouchdb';
-import * as idb from 'pouchdb-adapter-idb';
+import { createRxDatabase, addRxPlugin } from 'rxdb';
+import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 
 import { RxDBQueryBuilderPlugin } from 'rxdb/plugins/query-builder';
-import { RxDBValidatePlugin } from 'rxdb/plugins/validate';
+import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import noteSchema from './schema';
 
 /**
@@ -12,16 +12,16 @@ import noteSchema from './schema';
  */
 
 addRxPlugin(RxDBQueryBuilderPlugin);
-addRxPlugin(RxDBValidatePlugin);
-addPouchPlugin(idb);
+addRxPlugin(RxDBDevModePlugin);
 
 let dbPromise;
 
 const _create = async () => {
   const db = await createRxDatabase({
     name: 'rxdbdemo',
-    storage: getRxStoragePouch('idb'),
-    ignoreDuplicate: true
+    storage: wrappedValidateAjvStorage({
+      storage: getRxStorageDexie(),
+    })
   });
   await db.addCollections({ notes: { schema: noteSchema } });
   dbPromise = db;

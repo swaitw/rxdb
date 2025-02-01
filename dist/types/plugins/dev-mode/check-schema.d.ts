@@ -1,8 +1,4 @@
-/**
- * does additional checks over the schema-json
- * to ensure nothing is broken or not supported
- */
-import type { RxJsonSchema } from '../../types';
+import type { RxJsonSchema } from '../../types/index.d.ts';
 /**
  * checks if the fieldname is allowed
  * this makes sure that the fieldnames can be transformed into javascript-vars
@@ -13,7 +9,7 @@ export declare function checkFieldNameRegex(fieldName: string): void;
 /**
  * validate that all schema-related things are ok
  */
-export declare function validateFieldsDeep(jsonSchema: any): true;
+export declare function validateFieldsDeep(rxJsonSchema: RxJsonSchema<any>): true;
 export declare function checkPrimaryKey(jsonSchema: RxJsonSchema<any>): void;
 /**
  * does the checking

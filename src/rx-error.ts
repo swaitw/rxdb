@@ -2,12 +2,13 @@
  * here we use custom errors with the additional field 'parameters'
  */
 
-import { overwritable } from './overwritable';
+import { overwritable } from './overwritable.ts';
 import type {
     RxErrorParameters,
-    PouchWriteError,
-    RxErrorKey
-} from './types';
+    RxErrorKey,
+    RxStorageWriteError,
+    RxStorageWriteErrorConflict
+} from './types/index.d.ts';
 
 /**
  * transform an object of parameters to a presentable string
@@ -16,21 +17,24 @@ function parametersToString(parameters: any): string {
     let ret = '';
     if (Object.keys(parameters).length === 0)
         return ret;
-    ret += 'Given parameters: {\n';
+    ret +='-'.repeat(20) + '\n';
+    ret += 'Parameters:\n';
     ret += Object.keys(parameters)
         .map(k => {
             let paramStr = '[object Object]';
             try {
-                paramStr = JSON.stringify(
-                    parameters[k],
-                    (_k, v) => v === undefined ? null : v,
-                    2
-                );
+                if (k === 'errors') {
+                    paramStr = parameters[k].map((err: any) => JSON.stringify(err, Object.getOwnPropertyNames(err)));
+                } else {
+                    paramStr = JSON.stringify(parameters[k], function (_k, v) {
+                        return v === undefined ? null : v;
+                    }, 2);
+                }
             } catch (e) { }
-            return k + ':' + paramStr;
+            return k + ': ' + paramStr;
         })
         .join('\n');
-    ret += '}';
+    ret += '\n';
     return ret;
 }
 
@@ -39,7 +43,7 @@ function messageForError(
     code: string,
     parameters: any
 ): string {
-    return 'RxError (' + code + '):' + '\n' +
+    return '' + '\n' +
         message + '\n' +
         parametersToString(parameters);
 }
@@ -47,7 +51,9 @@ function messageForError(
 export class RxError extends Error {
     public code: RxErrorKey;
     public message: string;
+    public url: string;
     public parameters: RxErrorParameters;
+    // always true, use this to detect if its an rxdb-error
     public rxdb: true;
     constructor(
         code: RxErrorKey,
@@ -58,6 +64,7 @@ export class RxError extends Error {
         super(mes);
         this.code = code;
         this.message = mes;
+        this.url = getErrorUrl(code);
         this.parameters = parameters;
         this.rxdb = true; // tag them as internal
     }
@@ -75,7 +82,9 @@ export class RxError extends Error {
 export class RxTypeError extends TypeError {
     public code: RxErrorKey;
     public message: string;
+    public url: string;
     public parameters: RxErrorParameters;
+    // always true, use this to detect if its an rxdb-error
     public rxdb: true;
     constructor(
         code: RxErrorKey,
@@ -86,6 +95,7 @@ export class RxTypeError extends TypeError {
         super(mes);
         this.code = code;
         this.message = mes;
+        this.url = getErrorUrl(code);
         this.parameters = parameters;
         this.rxdb = true; // tag them as internal
     }
@@ -100,13 +110,22 @@ export class RxTypeError extends TypeError {
     }
 }
 
+
+export function getErrorUrl(code: RxErrorKey) {
+    return 'https://rxdb.info/errors.html?console=errors#' + code;
+}
+
+export function errorUrlHint(code: RxErrorKey) {
+    return '\nFind out more about this error here: ' + getErrorUrl(code) + ' \n';
+}
+
 export function newRxError(
     code: RxErrorKey,
     parameters?: RxErrorParameters
 ): RxError {
     return new RxError(
         code,
-        overwritable.tunnelErrorMessage(code),
+        overwritable.tunnelErrorMessage(code) + errorUrlHint(code),
         parameters
     );
 }
@@ -117,18 +136,40 @@ export function newRxTypeError(
 ): RxTypeError {
     return new RxTypeError(
         code,
-        overwritable.tunnelErrorMessage(code),
+        overwritable.tunnelErrorMessage(code) + errorUrlHint(code),
         parameters
     );
 }
 
-export function isPouchdbConflictError(err: RxError | RxTypeError): boolean {
+
+/**
+ * Returns the error if it is a 409 conflict,
+ * return false if it is another error.
+ */
+export function isBulkWriteConflictError<RxDocType>(
+    err?: RxStorageWriteError<RxDocType> | any
+): RxStorageWriteErrorConflict<RxDocType> | false {
     if (
-        err.parameters && err.parameters.pouchDbError &&
-        (err.parameters.pouchDbError as PouchWriteError).status === 409
+        err &&
+        err.status === 409
     ) {
-        return true;
+        return err;
     } else {
         return false;
     }
+}
+
+
+const STORAGE_WRITE_ERROR_CODE_TO_MESSAGE: { [k: number]: string; } = {
+    409: 'document write conflict',
+    422: 'schema validation error',
+    510: 'attachment data missing'
+};
+
+export function rxStorageWriteErrorToRxError(err: RxStorageWriteError<any>): RxError {
+    return newRxError('COL20', {
+        name: STORAGE_WRITE_ERROR_CODE_TO_MESSAGE[err.status],
+        document: err.documentId,
+        writeError: err
+    });
 }

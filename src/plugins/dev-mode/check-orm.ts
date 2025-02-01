@@ -1,9 +1,9 @@
 import {
     newRxError,
     newRxTypeError
-} from '../../rx-error';
-import type { KeyFunctionMap } from '../../types';
-import { rxCollectionProperties, rxDocumentProperties } from './entity-properties';
+} from '../../rx-error.ts';
+import type { KeyFunctionMap, RxJsonSchema } from '../../types/index.d.ts';
+import { rxCollectionProperties, rxDocumentProperties } from './entity-properties.ts';
 
 /**
  * checks if the given static methods are allowed
@@ -43,5 +43,23 @@ export function checkOrmMethods(statics?: KeyFunctionMap) {
                     name: k
                 });
             }
+        });
+}
+
+
+export function checkOrmDocumentMethods<RxDocType>(
+    schema: RxJsonSchema<RxDocType>,
+    methods?: any,
+) {
+    const topLevelFields = Object.keys(schema.properties) as (keyof RxDocType)[];
+    if (!methods) {
+        return;
+    }
+    Object.keys(methods)
+        .filter(funName => topLevelFields.includes(funName as any))
+        .forEach(funName => {
+            throw newRxError('COL18', {
+                funName
+            });
         });
 }

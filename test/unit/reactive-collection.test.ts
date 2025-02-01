@@ -1,33 +1,33 @@
 import assert from 'assert';
-import config from './config';
+import config, { describeParallel } from './config.ts';
 
-import * as schemas from '../helper/schemas';
-import * as schemaObjects from '../helper/schema-objects';
-import * as humansCollection from '../helper/humans-collection';
+import {
+    schemaObjects,
+    schemas,
+    humansCollection,
+    HumanDocumentType
+} from '../../plugins/test-utils/index.mjs';
 
 import {
     createRxDatabase,
-    randomCouchString,
+    randomToken,
     RxChangeEvent
-} from '../../plugins/core';
-
-import {
-    getRxStoragePouch,
-} from '../../plugins/pouchdb';
+} from '../../plugins/core/index.mjs';
 
 
 import AsyncTestUtil from 'async-test-util';
 import {
     first
 } from 'rxjs/operators';
+import { firstValueFrom } from 'rxjs';
 
-config.parallel('reactive-collection.test.js', () => {
+describeParallel('reactive-collection.test.js', () => {
     describe('.insert()', () => {
         describe('positive', () => {
             it('should get a valid event on insert', async () => {
                 const db = await createRxDatabase({
-                    name: randomCouchString(10),
-                    storage: getRxStoragePouch('memory'),
+                    name: randomToken(10),
+                    storage: config.storage.getStorage(),
                 });
                 const colName = 'foobar';
                 const cols = await db.addCollections({
@@ -37,41 +37,13 @@ config.parallel('reactive-collection.test.js', () => {
                 });
                 const c = cols[colName];
 
-                c.insert(schemaObjects.human());
-                const changeEvent: RxChangeEvent = await c.$.pipe(first()).toPromise() as any;
+                const changeEventPromise = firstValueFrom(c.$.pipe(first()));
+                c.insert(schemaObjects.humanData());
+                const changeEvent = await changeEventPromise;
                 assert.strictEqual(changeEvent.collectionName, colName);
                 assert.strictEqual(typeof changeEvent.documentId, 'string');
                 assert.ok(changeEvent.documentData);
-                db.destroy();
-            });
-        });
-        describe('negative', () => {
-            it('should get no event on non-succes-insert', async () => {
-                const db = await createRxDatabase({
-                    name: randomCouchString(10),
-                    storage: getRxStoragePouch('memory'),
-                });
-                const cols = await db.addCollections({
-                    foobar: {
-                        schema: schemas.human
-                    }
-                });
-                const c = cols.foobar;
-
-                let calls = 0;
-                const sub = db.$.subscribe(() => {
-                    calls++;
-                });
-                await AsyncTestUtil.assertThrows(
-                    () => c.insert({
-                        foo: 'baar'
-                    }),
-                    'RxError',
-                    'schema'
-                );
-                assert.strictEqual(calls, 0);
-                sub.unsubscribe();
-                db.destroy();
+                db.close();
             });
         });
     });
@@ -79,8 +51,8 @@ config.parallel('reactive-collection.test.js', () => {
         describe('positive', () => {
             it('should fire on bulk insert', async () => {
                 const db = await createRxDatabase({
-                    name: randomCouchString(10),
-                    storage: getRxStoragePouch('memory'),
+                    name: randomToken(10),
+                    storage: config.storage.getStorage(),
                 });
                 const collections = await db.addCollections({
                     human: {
@@ -89,12 +61,12 @@ config.parallel('reactive-collection.test.js', () => {
                 });
                 const collection = collections.human;
 
-                const emittedCollection: RxChangeEvent[] = [];
+                const emittedCollection: RxChangeEvent<HumanDocumentType>[] = [];
                 const colSub = collection.insert$.subscribe((ce) => {
                     emittedCollection.push(ce);
                 });
 
-                const docs = new Array(1).fill(0).map(() => schemaObjects.human());
+                const docs = new Array(1).fill(0).map(() => schemaObjects.humanData());
 
                 await collection.bulkInsert(docs);
 
@@ -105,7 +77,7 @@ config.parallel('reactive-collection.test.js', () => {
                 assert.ok(changeEvent.documentData);
 
                 colSub.unsubscribe();
-                db.destroy();
+                db.close();
             });
         });
     });
@@ -113,8 +85,7 @@ config.parallel('reactive-collection.test.js', () => {
         describe('positive', () => {
             it('should fire on bulk remove', async () => {
                 const c = await humansCollection.create(10);
-
-                const emittedCollection: RxChangeEvent[] = [];
+                const emittedCollection: RxChangeEvent<HumanDocumentType>[] = [];
                 const colSub = c.remove$.subscribe((ce) => {
                     emittedCollection.push(ce);
                 });
@@ -123,17 +94,15 @@ config.parallel('reactive-collection.test.js', () => {
                 const primaryList = docList.map(doc => doc.primary);
 
                 await c.bulkRemove(primaryList);
-
                 const changeEvent = emittedCollection[0];
 
                 assert.strictEqual(changeEvent.operation, 'DELETE');
                 assert.strictEqual(changeEvent.collectionName, 'human');
-                assert.strictEqual(changeEvent.documentId, docList[0].primary);
-                assert.ok(!changeEvent.documentData);
+                assert.ok(changeEvent.documentData);
                 assert.ok(changeEvent.previousDocumentData);
 
                 colSub.unsubscribe();
-                c.database.destroy();
+                c.database.close();
             });
         });
     });
@@ -156,7 +125,7 @@ config.parallel('reactive-collection.test.js', () => {
 
                 assert.deepStrictEqual(ar[0], []);
 
-                await c.insert(schemaObjects.human());
+                await c.insert(schemaObjects.humanData());
                 await AsyncTestUtil.waitUntil(() => ar.length === 2);
 
                 const doc: any = await c.findOne().exec();
@@ -164,7 +133,7 @@ config.parallel('reactive-collection.test.js', () => {
                 await AsyncTestUtil.waitUntil(() => ar.length === 3);
                 sub.unsubscribe();
 
-                c.database.destroy();
+                c.database.close();
             });
         });
     });
@@ -172,61 +141,61 @@ config.parallel('reactive-collection.test.js', () => {
         it('should only emit inserts', async () => {
             const c = await humansCollection.create(0);
 
-            const emitted: RxChangeEvent[] = [];
+            const emitted: RxChangeEvent<HumanDocumentType>[] = [];
             c.insert$.subscribe(cE => emitted.push(cE as any));
 
-            await c.insert(schemaObjects.human());
-            const doc = await c.insert(schemaObjects.human());
-            await c.insert(schemaObjects.human());
+            await c.insert(schemaObjects.humanData());
+            const doc = await c.insert(schemaObjects.humanData());
+            await c.insert(schemaObjects.humanData());
             await doc.remove();
 
-            await c.insert(schemaObjects.human());
+            await c.insert(schemaObjects.humanData());
 
             await AsyncTestUtil.waitUntil(() => {
                 return emitted.length === 4;
             });
             emitted.forEach(cE => assert.strictEqual(cE.operation, 'INSERT'));
-            c.database.destroy();
+            c.database.close();
         });
     });
     describe('.update$', () => {
         it('should only emit updates', async () => {
             const c = await humansCollection.create(0);
 
-            const emitted: RxChangeEvent[] = [];
+            const emitted: RxChangeEvent<HumanDocumentType>[] = [];
             c.update$.subscribe(cE => emitted.push(cE as any));
 
-            const doc1 = await c.insert(schemaObjects.human());
-            const doc2 = await c.insert(schemaObjects.human());
-            const doc3 = await c.insert(schemaObjects.human());
-            await c.insert(schemaObjects.human());
+            const doc1 = await c.insert(schemaObjects.humanData());
+            const doc2 = await c.insert(schemaObjects.humanData());
+            const doc3 = await c.insert(schemaObjects.humanData());
+            await c.insert(schemaObjects.humanData());
             await doc3.remove();
 
-            await doc1.atomicPatch({ firstName: 'foobar1' });
-            await doc2.atomicPatch({ firstName: 'foobar2' });
+            await doc1.incrementalPatch({ firstName: 'foobar1' });
+            await doc2.incrementalPatch({ firstName: 'foobar2' });
 
             await AsyncTestUtil.waitUntil(() => emitted.length === 2);
             emitted.forEach(cE => assert.strictEqual(cE.operation, 'UPDATE'));
-            c.database.destroy();
+            c.database.close();
         });
     });
     describe('.remove$', () => {
         it('should only emit removes', async () => {
             const c = await humansCollection.create(0);
 
-            const emitted: RxChangeEvent[] = [];
+            const emitted: RxChangeEvent<HumanDocumentType>[] = [];
             c.remove$.subscribe(cE => emitted.push(cE as any));
-            await c.insert(schemaObjects.human());
-            const doc1 = await c.insert(schemaObjects.human());
-            const doc2 = await c.insert(schemaObjects.human());
+            await c.insert(schemaObjects.humanData());
+            const doc1 = await c.insert(schemaObjects.humanData());
+            const doc2 = await c.insert(schemaObjects.humanData());
             await doc1.remove();
-            await c.insert(schemaObjects.human());
+            await c.insert(schemaObjects.humanData());
             await doc2.remove();
 
 
             await AsyncTestUtil.waitUntil(() => emitted.length === 2);
             emitted.forEach(cE => assert.strictEqual(cE.operation, 'DELETE'));
-            c.database.destroy();
+            c.database.close();
         });
     });
 });

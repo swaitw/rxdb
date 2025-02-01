@@ -1,8 +1,10 @@
 import {
     Component,
     ViewChild,
-    ChangeDetectionStrategy
+    ChangeDetectionStrategy,
+    ChangeDetectorRef
 } from '@angular/core';
+import { ensureNotFalsy, RxError } from 'rxdb';
 import { DatabaseService } from '../../services/database.service';
 
 @Component({
@@ -16,31 +18,53 @@ export class HeroInsertComponent {
 
     @ViewChild('input', { static: false }) inputfield: any;
 
-    tempDoc: any;
+    name = '';
+    color = '';
+
+    public errors: {
+        name?: string;
+        color?: string;
+    } = {};
 
     constructor(
-        private dbService: DatabaseService
+        private dbService: DatabaseService,
+        private cdr: ChangeDetectorRef
     ) {
-        this.reset();
+    }
+
+    public randomString() {
+        return getRandomArbitrary(1, 1000000) + '_' + new Date().getTime() + '_random_string_to_disable_autocomplete';
     }
 
     reset() {
-        this.tempDoc = this.dbService.db.hero.newDocument({
-            maxHP: getRandomArbitrary(100, 1000)
-        });
+        this.name = '';
+        this.color = '';
+        this.errors = {};
     }
 
     async submit() {
         console.log('HeroInsertComponent.submit():');
-        console.log('name: ' + this.tempDoc.name);
-        console.log('color: ' + this.tempDoc.color);
+        console.log('name: ' + this.name);
+        console.log('color: ' + this.color);
 
         try {
-            await this.tempDoc.save();
+            await this.dbService.db.hero.insert({
+                name: this.name,
+                color: this.color,
+                hp: 100
+            });
             this.reset();
-        } catch (err) {
+        } catch (err: any) {
             alert('Error: Please check console');
             console.error('hero-insert.submit(): error:');
+            console.dir(err);
+
+            const innerError = ensureNotFalsy((err as RxError).parameters.errors)[0];
+            const errorField = (innerError as any).instancePath.substring(1);
+            console.log('errorField ' + errorField);
+            (this.errors as any)[errorField] = innerError.message;
+            console.dir(this.errors);
+            this.cdr.detectChanges();
             throw err;
         }
 

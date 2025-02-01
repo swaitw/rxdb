@@ -1,11 +1,8 @@
-/**
- * stores the hooks that where added by the plugins
- */
 
 /**
  * hook-functions that can be extended by the plugin
  */
-export const HOOKS: { [k: string]: any[] } = {
+export const HOOKS = {
     /**
      * Runs before a plugin is added.
      * Use this to block the usage of non-compatible plugins.
@@ -23,11 +20,17 @@ export const HOOKS: { [k: string]: any[] } = {
     createRxDatabase: [],
     preCreateRxCollection: [],
     createRxCollection: [],
+    createRxState: [],
     /**
-    * runs at the end of the destroy-process of a collection
+    * runs at the end of the close-process of a collection
     * @async
     */
-    postDestroyRxCollection: [],
+    postCloseRxCollection: [],
+    /**
+     * Runs after a collection is removed.
+     * @async
+     */
+    postRemoveRxCollection: [],
     /**
       * functions that get the json-schema as input
       * to do additionally checks/manipulation
@@ -38,34 +41,13 @@ export const HOOKS: { [k: string]: any[] } = {
      * gets RxSchema as attribute
      */
     createRxSchema: [],
+    prePrepareRxQuery: [],
     preCreateRxQuery: [],
-    createRxQuery: [],
-    /**
-     * Runs before a document is send to the query matcher.
-     */
-    preQueryMatcher: [],
-    /**
-     * Runs before a document is send to the sortComparator.
-     */
-    preSortComparator: [],
     /**
      * Runs before a query is send to the
      * prepareQuery function of the storage engine.
      */
     prePrepareQuery: [],
-
-    /**
-     * Runs before the document data is send to the
-     * bulkWrite of the storage instance
-     */
-    preWriteToStorageInstance: [],
-
-    /**
-     * Runs after the document data is ready from
-     * the storage instance.
-     */
-    postReadFromInstance: [],
-
     createRxDocument: [],
     /**
      * runs after a RxDocument is created,
@@ -79,11 +61,12 @@ export const HOOKS: { [k: string]: any[] } = {
      * Notice that you have to clone stuff before mutating the inputs.
      */
     preCreateRxStorageInstance: [],
+    preStorageWrite: [],
     /**
      * runs on the document-data before the document is migrated
      * {
-     *   doc: Object, // originam doc-data
-     *   migrated: // migrated doc-data after run throught migration-strategies
+     *   doc: Object, // original doc-data
+     *   migrated: // migrated doc-data after run through migration-strategies
      * }
      */
     preMigrateDocument: [],
@@ -92,30 +75,54 @@ export const HOOKS: { [k: string]: any[] } = {
      */
     postMigrateDocument: [],
     /**
-     * runs at the beginning of the destroy-process of a database
+     * runs at the beginning of the close-process of a database
      */
-    preDestroyRxDatabase: []
+    preCloseRxDatabase: [],
+    /**
+     * runs after a database has been removed
+     * @async
+     */
+    postRemoveRxDatabase: [],
+
+
+    postCleanup: [],
+
+    /**
+     * runs before the replication writes the rows to master
+     * but before the rows have been modified
+     * @async
+     */
+    preReplicationMasterWrite: [],
+
+    /**
+     * runs after the replication has been sent to the server
+     * but before the new documents have been handled
+     * @async
+     */
+    preReplicationMasterWriteDocumentsHandle: [],
 };
 
-export function runPluginHooks(hookKey: string, obj: any) {
-    HOOKS[hookKey].forEach(fun => fun(obj));
+export function runPluginHooks(hookKey: keyof typeof HOOKS, obj: any) {
+    if (HOOKS[hookKey].length > 0) {
+        HOOKS[hookKey].forEach(fun => (fun as any)(obj));
+    }
 }
 
 
 /**
- * TODO
- * we should not run the hooks in parallel
- * this makes stuff unpredictable.
+ * We do intentionally not run the hooks in parallel
+ * because that makes stuff unpredictable and we use runAsyncPluginHooks()
+ * only in places that are not that relevant for performance.
  */
-export function runAsyncPluginHooks(hookKey: string, obj: any): Promise<any> {
-    return Promise.all(
-        HOOKS[hookKey].map(fun => fun(obj))
-    );
+export async function runAsyncPluginHooks(hookKey: keyof typeof HOOKS, obj: any): Promise<any> {
+    for (const fn of HOOKS[hookKey]) {
+        await (fn as any)(obj);
+    }
 }
 
 /**
  * used in tests to remove hooks
  */
-export function _clearHook(type: string, fun: Function) {
+export function _clearHook(type: keyof typeof HOOKS, fun: Function) {
     HOOKS[type] = HOOKS[type].filter(h => h !== fun);
 }

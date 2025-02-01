@@ -1,88 +1,26 @@
-/**
- * this plugin adds the RxCollection.syncGraphQl()-function to rxdb
- * you can use it to sync collections with remote graphql endpoint
- */
-import { BehaviorSubject, Subject, Subscription, Observable } from 'rxjs';
-import type { RxCollection, GraphQLSyncPullOptions, GraphQLSyncPushOptions, RxPlugin, RxDocumentData } from '../../types';
-export declare class RxGraphQLReplicationState<RxDocType> {
+import type { RxCollection, ReplicationPullOptions, ReplicationPushOptions, GraphQLServerUrl, RxGraphQLReplicationQueryBuilderResponseObject, RxGraphQLReplicationClientState, ById } from '../../types/index.d.ts';
+import { RxReplicationState } from '../replication/index.ts';
+import { SyncOptionsGraphQL } from '../../index.ts';
+export declare class RxGraphQLReplicationState<RxDocType, CheckpointType> extends RxReplicationState<RxDocType, CheckpointType> {
+    readonly url: GraphQLServerUrl;
+    readonly clientState: RxGraphQLReplicationClientState;
+    readonly replicationIdentifier: string;
     readonly collection: RxCollection<RxDocType>;
-    readonly url: string;
-    headers: {
-        [k: string]: string;
-    };
-    readonly pull: GraphQLSyncPullOptions<RxDocType>;
-    readonly push: GraphQLSyncPushOptions<RxDocType>;
-    readonly deletedFlag: string;
-    readonly live: boolean;
-    liveInterval: number;
-    retryTime: number;
-    constructor(collection: RxCollection<RxDocType>, url: string, headers: {
-        [k: string]: string;
-    }, pull: GraphQLSyncPullOptions<RxDocType>, push: GraphQLSyncPushOptions<RxDocType>, deletedFlag: string, live: boolean, liveInterval: number, retryTime: number);
-    client: any;
-    endpointHash: string;
-    _subjects: {
-        received: Subject<unknown>;
-        /**
-         * @deprecated use received instead because it is spelled correctly
-         */
-        recieved: Subject<unknown>;
-        send: Subject<unknown>;
-        error: Subject<unknown>;
-        canceled: BehaviorSubject<boolean>;
-        active: BehaviorSubject<boolean>;
-        initialReplicationComplete: BehaviorSubject<boolean>;
-    };
-    _runningPromise: Promise<void>;
-    _subs: Subscription[];
-    _runQueueCount: number;
-    _runCount: number;
-    initialReplicationComplete$: Observable<any>;
-    received$: Observable<RxDocumentData<RxDocType>>;
-    /**
-     * @deprecated use received instead because it is spelled correctly
-     */
-    recieved$: Observable<RxDocumentData<RxDocType>>;
-    send$: Observable<any>;
-    error$: Observable<any>;
-    canceled$: Observable<any>;
-    active$: Observable<boolean>;
-    /**
-     * things that are more complex to not belong into the constructor
-     */
-    _prepare(): void;
-    isStopped(): boolean;
-    awaitInitialReplication(): Promise<true>;
-    run(retryOnFail?: boolean): Promise<void>;
-    /**
-     * returns true if retry must be done
-     */
-    _run(retryOnFail?: boolean): Promise<boolean>;
-    /**
-     * Pull all changes from the server,
-     * start from the last pulled change.
-     * @return true if successfully, false if something errored
-     */
-    runPull(): Promise<boolean>;
-    /**
-     * @return true if successfull, false if not
-     */
-    runPush(): Promise<boolean>;
-    handleDocumentsFromRemote(docs: any[]): Promise<boolean>;
-    cancel(): Promise<any>;
-    setHeaders(headers: {
-        [k: string]: string;
-    }): void;
+    readonly deletedField: string;
+    readonly pull?: ReplicationPullOptions<RxDocType, CheckpointType> | undefined;
+    readonly push?: ReplicationPushOptions<RxDocType> | undefined;
+    readonly live?: boolean | undefined;
+    retryTime?: number | undefined;
+    autoStart?: boolean | undefined;
+    readonly customFetch?: WindowOrWorkerGlobalScope["fetch"] | undefined;
+    constructor(url: GraphQLServerUrl, clientState: RxGraphQLReplicationClientState, replicationIdentifier: string, collection: RxCollection<RxDocType>, deletedField: string, pull?: ReplicationPullOptions<RxDocType, CheckpointType> | undefined, push?: ReplicationPushOptions<RxDocType> | undefined, live?: boolean | undefined, retryTime?: number | undefined, autoStart?: boolean | undefined, customFetch?: WindowOrWorkerGlobalScope["fetch"] | undefined);
+    setHeaders(headers: ById<string>): void;
+    setCredentials(credentials: RequestCredentials | undefined): void;
+    graphQLRequest(queryParams: RxGraphQLReplicationQueryBuilderResponseObject): Promise<any>;
 }
-export declare function syncGraphQL(this: RxCollection, { url, headers, waitForLeadership, pull, push, deletedFlag, live, liveInterval, // in ms
-retryTime, // in ms
-autoStart }: any): RxGraphQLReplicationState<any>;
-export * from './helper';
-export * from './crawling-checkpoint';
-export * from './graphql-schema-from-rx-schema';
-export * from './query-builder-from-rx-schema';
-export declare const rxdb = true;
-export declare const prototypes: {
-    RxCollection: (proto: any) => void;
-};
-export declare const RxDBReplicationGraphQLPlugin: RxPlugin;
+export declare function replicateGraphQL<RxDocType, CheckpointType>({ collection, url, headers, credentials, deletedField, waitForLeadership, pull, push, live, fetch: customFetch, retryTime, // in ms
+autoStart, replicationIdentifier }: SyncOptionsGraphQL<RxDocType, CheckpointType>): RxGraphQLReplicationState<RxDocType, CheckpointType>;
+export * from './helper.ts';
+export * from './graphql-schema-from-rx-schema.ts';
+export * from './query-builder-from-rx-schema.ts';
+export * from './graphql-websocket.ts';

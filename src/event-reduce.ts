@@ -6,32 +6,38 @@ import {
     QueryMatcher,
     DeterministicSortComparator,
     StateResolveFunctionInput,
-    getStateSet,
-    logStateSet,
-    StateResolveFunction,
-    UNKNOWN_VALUE
+    ChangeEvent
 } from 'event-reduce-js';
-import type { RxQuery, MangoQuery, RxChangeEvent, RxDocumentWriteData } from './types';
-import { runPluginHooks } from './hooks';
-import { rxChangeEventToEventReduceChangeEvent } from './rx-change-event';
-import objectPath from 'object-path';
-import { newRxError } from './rx-error';
+import type {
+    RxQuery,
+    MangoQuery,
+    StringKeys,
+    RxDocumentData,
+    RxStorageChangeEvent
+} from './types/index.d.ts';
+import { rxChangeEventToEventReduceChangeEvent } from './rx-change-event.ts';
+import {
+    clone,
+    ensureNotFalsy,
+    getFromMapOrCreate
+} from './plugins/utils/index.ts';
+import { getQueryMatcher, getSortComparator, normalizeMangoQuery } from './rx-query-helper.ts';
 
 export type EventReduceResultNeg = {
-    runFullQueryAgain: true,
+    runFullQueryAgain: true;
 };
 export type EventReduceResultPos<RxDocumentType> = {
-    runFullQueryAgain: false,
-    changed: boolean,
+    runFullQueryAgain: false;
+    changed: boolean;
     newResults: RxDocumentType[];
 };
 export type EventReduceResult<RxDocumentType> = EventReduceResultNeg | EventReduceResultPos<RxDocumentType>;
 
 
 export function getSortFieldsOfQuery<RxDocType>(
-    primaryKey: keyof RxDocType,
+    primaryKey: StringKeys<RxDocumentData<RxDocType>>,
     query: MangoQuery<RxDocType>
-): (string | keyof RxDocType)[] {
+): (string | StringKeys<RxDocType>)[] {
     if (!query.sort || query.sort.length === 0) {
         return [primaryKey];
     } else {
@@ -45,62 +51,70 @@ export const RXQUERY_QUERY_PARAMS_CACHE: WeakMap<RxQuery, QueryParams<any>> = ne
 export function getQueryParams<RxDocType>(
     rxQuery: RxQuery<RxDocType>
 ): QueryParams<RxDocType> {
-    if (!RXQUERY_QUERY_PARAMS_CACHE.has(rxQuery)) {
-        const collection = rxQuery.collection;
-        const queryJson: MangoQuery<RxDocType> = rxQuery.getPreparedQuery();
-        const primaryKey = collection.schema.primaryPath;
+    return getFromMapOrCreate(
+        RXQUERY_QUERY_PARAMS_CACHE,
+        rxQuery,
+        () => {
+            const collection = rxQuery.collection;
+            const normalizedMangoQuery = normalizeMangoQuery(
+                collection.storageInstance.schema,
+                clone(rxQuery.mangoQuery)
+            );
+            const primaryKey = collection.schema.primaryPath;
 
-        /**
-         * Create a custom sort comparator
-         * that uses the hooks to ensure
-         * we send for example compressed documents to be sorted by compressed queries.
-         */
-        const sortComparator = collection.storageInstance.getSortComparator(queryJson);
-        const useSortComparator: DeterministicSortComparator<RxDocType> = (docA: RxDocType, docB: RxDocType) => {
-            const sortComparatorData = {
-                docA,
-                docB,
-                rxQuery
+            /**
+             * Create a custom sort comparator
+             * that uses the hooks to ensure
+             * we send for example compressed documents to be sorted by compressed queries.
+             */
+            const sortComparator = getSortComparator(
+                collection.schema.jsonSchema,
+                normalizedMangoQuery
+            );
+
+            const useSortComparator: DeterministicSortComparator<RxDocType> = (docA: RxDocType, docB: RxDocType) => {
+                const sortComparatorData = {
+                    docA,
+                    docB,
+                    rxQuery
+                };
+                return sortComparator(sortComparatorData.docA, sortComparatorData.docB);
             };
-            runPluginHooks('preSortComparator', sortComparatorData);
-            return sortComparator(sortComparatorData.docA, sortComparatorData.docB);
-        };
 
-        /**
-         * Create a custom query matcher
-         * that uses the hooks to ensure
-         * we send for example compressed documents to match compressed queries.
-         */
-        const queryMatcher = collection.storageInstance.getQueryMatcher(queryJson);
-        const useQueryMatcher: QueryMatcher<RxDocumentWriteData<RxDocType>> = (doc: RxDocumentWriteData<RxDocType>) => {
-            const queryMatcherData = {
-                doc,
-                rxQuery
+            /**
+             * Create a custom query matcher
+             * that uses the hooks to ensure
+             * we send for example compressed documents to match compressed queries.
+             */
+            const queryMatcher = getQueryMatcher(
+                collection.schema.jsonSchema,
+                normalizedMangoQuery
+            );
+            const useQueryMatcher: QueryMatcher<RxDocumentData<RxDocType>> = (doc: RxDocumentData<RxDocType>) => {
+                const queryMatcherData = {
+                    doc,
+                    rxQuery
+                };
+                return queryMatcher(queryMatcherData.doc);
             };
-            runPluginHooks('preQueryMatcher', queryMatcherData);
 
-            return queryMatcher(queryMatcherData.doc);
-        };
-
-        const ret: QueryParams<any> = {
-            primaryKey: rxQuery.collection.schema.primaryPath as any,
-            skip: queryJson.skip,
-            limit: queryJson.limit,
-            sortFields: getSortFieldsOfQuery(primaryKey, rxQuery.mangoQuery) as string[],
-            sortComparator: useSortComparator,
-            queryMatcher: useQueryMatcher
-        };
-        RXQUERY_QUERY_PARAMS_CACHE.set(rxQuery, ret);
-        return ret;
-    } else {
-        return RXQUERY_QUERY_PARAMS_CACHE.get(rxQuery) as QueryParams<RxDocType>;
-    }
+            const ret: QueryParams<any> = {
+                primaryKey: rxQuery.collection.schema.primaryPath as any,
+                skip: normalizedMangoQuery.skip,
+                limit: normalizedMangoQuery.limit,
+                sortFields: getSortFieldsOfQuery(primaryKey, normalizedMangoQuery) as string[],
+                sortComparator: useSortComparator,
+                queryMatcher: useQueryMatcher
+            };
+            return ret;
+        }
+    );
 }
 
 
 export function calculateNewResults<RxDocumentType>(
     rxQuery: RxQuery<RxDocumentType>,
-    rxChangeEvents: RxChangeEvent<RxDocumentType>[]
+    rxChangeEvents: RxStorageChangeEvent<RxDocumentType>[]
 ): EventReduceResult<RxDocumentType> {
     if (!rxQuery.collection.database.eventReduce) {
         return {
@@ -108,29 +122,27 @@ export function calculateNewResults<RxDocumentType>(
         };
     }
     const queryParams = getQueryParams(rxQuery);
-    const previousResults: RxDocumentType[] = rxQuery._resultsData.slice();
-
-    const previousResultsMap: Map<string, RxDocumentType> = rxQuery._resultsDataMap;
+    const previousResults: RxDocumentType[] = ensureNotFalsy(rxQuery._result).docsData.slice(0);
+    const previousResultsMap: Map<string, RxDocumentType> = ensureNotFalsy(rxQuery._result).docsDataMap;
     let changed: boolean = false;
 
-    const foundNonOptimizeable = rxChangeEvents.find(cE => {
-        const eventReduceEvent = rxChangeEventToEventReduceChangeEvent(cE);
 
+    const eventReduceEvents: ChangeEvent<RxDocumentType>[] = [];
+    for (let index = 0; index < rxChangeEvents.length; index++) {
+        const cE = rxChangeEvents[index];
+        const eventReduceEvent = rxChangeEventToEventReduceChangeEvent(cE);
+        if (eventReduceEvent) {
+            eventReduceEvents.push(eventReduceEvent);
+        }
+    }
+
+    const foundNonOptimizeable = eventReduceEvents.find(eventReduceEvent => {
         const stateResolveFunctionInput: StateResolveFunctionInput<RxDocumentType> = {
             queryParams,
             changeEvent: eventReduceEvent,
             previousResults,
             keyDocumentMap: previousResultsMap
-        }
-
-
-        /*
-        // use this to check if all states are calculated correctly
-        const stateSet = getStateSet(stateResolveFunctionInput);
-        console.dir(stateResolveFunctionInput);
-        console.log('state set:');
-        logStateSet(stateSet);
-        */
+        };
 
         const actionName: ActionName = calculateActionName(stateResolveFunctionInput);
         if (actionName === 'runFullQueryAgain') {

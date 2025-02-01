@@ -2,7 +2,7 @@
  * this is a template for a test.
  * If you found a bug, edit this test to reproduce it
  * and than make a pull-request with that failing test.
- * The maintainer will later move your test to the correct possition in the test-suite.
+ * The maintainer will later move your test to the correct position in the test-suite.
  *
  * To run this test do:
  * - 'npm run test:node' so it runs in nodejs
@@ -10,30 +10,31 @@
  */
 import assert from 'assert';
 import AsyncTestUtil from 'async-test-util';
-import config from './config';
+import config from './config.ts';
 
 import {
     createRxDatabase,
-    randomCouchString
-} from '../../plugins/core';
-
+    randomToken
+} from '../../plugins/core/index.mjs';
 import {
-    getRxStoragePouch,
-} from '../../plugins/pouchdb';
-
-
+    isNode
+} from '../../plugins/test-utils/index.mjs';
 describe('bug-report.test.js', () => {
-    it('should fail because it reproduces the bug', async () => {
+    it('should fail because it reproduces the bug', async function () {
 
         /**
          * If your test should only run in nodejs or only run in the browser,
-         * you should comment in the return operator and addapt the if statement.
+         * you should comment in the return operator and adapt the if statement.
          */
         if (
-            !config.platform.isNode() // runs only in node
-            // config.platform.isNode() // runs only in the browser
+            !isNode // runs only in node
+            // isNode // runs only in the browser
         ) {
             // return;
+        }
+
+        if (!config.storage.hasMultiInstance) {
+            return;
         }
 
         // create a schema
@@ -43,7 +44,8 @@ describe('bug-report.test.js', () => {
             type: 'object',
             properties: {
                 passportId: {
-                    type: 'string'
+                    type: 'string',
+                    maxLength: 100
                 },
                 firstName: {
                     type: 'string'
@@ -59,13 +61,20 @@ describe('bug-report.test.js', () => {
             }
         };
 
-        // generate a random database-name
-        const name = randomCouchString(10);
+        /**
+         * Always generate a random database-name
+         * to ensure that different test runs do not affect each other.
+         */
+        const name = randomToken(10);
 
         // create a database
         const db = await createRxDatabase({
             name,
-            storage: getRxStoragePouch('memory'),
+            /**
+             * By calling config.storage.getStorage(),
+             * we can ensure that all variations of RxStorage are tested in the CI.
+             */
+            storage: config.storage.getStorage(),
             eventReduce: true,
             ignoreDuplicate: true
         });
@@ -90,7 +99,7 @@ describe('bug-report.test.js', () => {
          */
         const dbInOtherTab = await createRxDatabase({
             name,
-            storage: getRxStoragePouch('memory'),
+            storage: config.storage.getStorage(),
             eventReduce: true,
             ignoreDuplicate: true
         });
@@ -114,16 +123,19 @@ describe('bug-report.test.js', () => {
          */
         assert.strictEqual(myDocument.age, 56);
 
+
         // you can also wait for events
-        const emitted = [];
+        const emitted: any[] = [];
         const sub = collectionInOtherTab.mycollection
             .findOne().$
-            .subscribe(doc => emitted.push(doc));
+            .subscribe(doc => {
+                emitted.push(doc);
+            });
         await AsyncTestUtil.waitUntil(() => emitted.length === 1);
 
         // clean up afterwards
         sub.unsubscribe();
-        db.destroy();
-        dbInOtherTab.destroy();
+        db.close();
+        dbInOtherTab.close();
     });
 });

@@ -5,38 +5,35 @@
  */
 import {
     RxSchema
-} from './rx-schema';
-import {
-    Crypter
-} from './crypter';
+} from './rx-schema.ts';
 import {
     basePrototype as RxDocumentPrototype
-} from './rx-document';
+} from './rx-document.ts';
 import {
     RxQueryBase
-} from './rx-query';
+} from './rx-query.ts';
 import {
     RxCollectionBase
-} from './rx-collection';
+} from './rx-collection.ts';
 import {
     RxDatabaseBase
-} from './rx-database';
+} from './rx-database.ts';
 import type {
     RxPlugin
-} from './types';
+} from './types/index.d.ts';
 
-import { overwritable } from './overwritable';
+import { overwritable } from './overwritable.ts';
 import {
-    HOOKS, runPluginHooks
-} from './hooks';
-import { newRxTypeError } from './rx-error';
+    HOOKS,
+    runPluginHooks
+} from './hooks.ts';
+import { newRxError, newRxTypeError } from './rx-error.ts';
 
 /**
  * prototypes that can be manipulated with a plugin
  */
-const PROTOTYPES: { [k: string]: any } = {
+const PROTOTYPES: { [k: string]: any; } = {
     RxSchema: RxSchema.prototype,
-    Crypter: Crypter.prototype,
     RxDocument: RxDocumentPrototype,
     RxQuery: RxQueryBase.prototype,
     RxCollection: RxCollectionBase.prototype,
@@ -44,6 +41,7 @@ const PROTOTYPES: { [k: string]: any } = {
 };
 
 const ADDED_PLUGINS: Set<RxPlugin | any> = new Set();
+const ADDED_PLUGIN_NAMES: Set<string> = new Set();
 
 /**
  * Add a plugin to the RxDB library.
@@ -56,18 +54,31 @@ export function addRxPlugin(plugin: RxPlugin) {
     if (ADDED_PLUGINS.has(plugin)) {
         return;
     } else {
+
+        // ensure no other plugin with the same name was already added
+        if (ADDED_PLUGIN_NAMES.has(plugin.name)) {
+            throw newRxError('PL3', {
+                name: plugin.name,
+                plugin,
+            });
+        }
+
         ADDED_PLUGINS.add(plugin);
+        ADDED_PLUGIN_NAMES.add(plugin.name);
     }
 
     /**
-     * Since version 10.0.0 we decoupled pouchdb from
-     * the rxdb core. Therefore pouchdb plugins must be added
-     * with the addPouchPlugin() method of the pouchdb plugin.
+     * To identify broken configurations,
+     * we only allow RxDB plugins to be passed into addRxPlugin().
      */
     if (!plugin.rxdb) {
         throw newRxTypeError('PL1', {
             plugin
         });
+    }
+
+    if (plugin.init) {
+        plugin.init();
     }
 
     // prototype-overwrites
@@ -89,6 +100,14 @@ export function addRxPlugin(plugin: RxPlugin) {
     if (plugin.hooks) {
         Object
             .entries(plugin.hooks)
-            .forEach(([name, fun]) => HOOKS[name].push(fun));
+            .forEach(([name, hooksObj]) => {
+                if (hooksObj.after) {
+                    (HOOKS as any)[name].push(hooksObj.after);
+                }
+                if (hooksObj.before) {
+                    (HOOKS as any)[name].unshift(hooksObj.before);
+                }
+            });
     }
 }
+

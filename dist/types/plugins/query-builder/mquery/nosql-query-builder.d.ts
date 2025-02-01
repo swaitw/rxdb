@@ -1,14 +1,14 @@
-import type { MangoQuery, MangoQuerySelector, MangoQuerySortPart } from '../../../types';
+import type { MangoQuery, MangoQuerySelector, MangoQuerySortPart } from '../../../types/index.d.ts';
 declare type MQueryOptions = {
     limit?: number;
     skip?: number;
     sort?: any;
 };
 export declare class NoSqlQueryBuilderClass<DocType> {
+    _path?: any | undefined;
     options: MQueryOptions;
     _conditions: MangoQuerySelector<DocType>;
     _fields: any;
-    _path?: any;
     private _distinct;
     /**
      * MQuery constructor used for building queries.
@@ -18,7 +18,7 @@ export declare class NoSqlQueryBuilderClass<DocType> {
      *     query.where('age').gte(21).exec(callback);
      *
      */
-    constructor(mangoQuery?: MangoQuery<DocType>);
+    constructor(mangoQuery?: MangoQuery<DocType>, _path?: any | undefined);
     /**
      * Specifies a `path` for use with chaining.
      */
@@ -109,7 +109,7 @@ export declare class NoSqlQueryBuilderClass<DocType> {
     /**
      * Make sure _path is set.
      *
-     * @parmam {String} method
+     * @param {String} method
      */
     _ensurePath(method: any): void;
     toJSON(): {
@@ -161,5 +161,5 @@ export declare const OTHER_MANGO_OPERATORS: string[];
  * Determines if `conds` can be merged using `mquery().merge()`
  */
 export declare function canMerge(conds: any): boolean;
-export declare function createQueryBuilder<DocType>(query?: MangoQuery<DocType>): NoSqlQueryBuilder<DocType>;
+export declare function createQueryBuilder<DocType>(query?: MangoQuery<DocType>, path?: any): NoSqlQueryBuilder<DocType>;
 export {};

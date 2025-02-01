@@ -1,4 +1,4 @@
-/* eslint-disable max-len */
+
 
 /**
  * this file is similar to the one of core-js
@@ -21,13 +21,13 @@ function is(it) {
 }
 
 function log(it) {
-    // eslint-disable-next-line no-console,no-control-regex
+    // eslint-disable-next-line no-control-regex
     console.log(COLOR ? it : it.replace(/\u001B\[\d+m/g, ''));
 }
 
 if (SHOW && !ADBLOCK && !CI && !DISABLE_OPENCOLLECTIVE && !SILENT) {
-    log('\u001b[96m\u001b[1mThank you for using RxDB ( https://github.com/pubkey/rxdb ) \u001b[96m\u001b[1m \n');
+    log('\u001b[96m\u001b[1mThank you for using RxDB ( https://rxdb.info/ ) \u001b[96m\u001b[1m \n');
     log('\u001B[96mHelp me to improve RxDB by answering a few questions ( < 2 minutes): \u001B[0m');
-    log('\u001B[96m>\u001B[94m Open the survey at https://forms.gle/aGPWdo2iELj4Ykkm9 \u001B[0m');
+    log('\u001B[96m>\u001B[94m Open the survey at https://rxdb.info/survey.html \u001B[0m');
     log('\u001b[96m\u001b[1mThank you \u001b[96m\u001b[1m \n');
 }

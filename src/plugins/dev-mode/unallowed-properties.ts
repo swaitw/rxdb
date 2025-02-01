@@ -1,7 +1,7 @@
-import type { RxCollectionCreator, RxDatabaseCreator } from '../../types';
-import { newRxError, newRxTypeError } from '../../rx-error';
-import { rxDatabaseProperties } from './entity-properties';
-import { isFolderPath } from '../../util';
+import type { RxCollectionCreator, RxDatabaseCreator } from '../../types/index.d.ts';
+import { newRxError, newRxTypeError } from '../../rx-error.ts';
+import { rxDatabaseProperties } from './entity-properties.ts';
+import { isFolderPath } from '../../plugins/utils/index.ts';
 
 /**
  * if the name of a collection
@@ -23,6 +23,12 @@ export function ensureDatabaseNameIsValid(args: RxDatabaseCreator<any, any>) {
 
     validateDatabaseName(args.name);
 
+    if(args.name.includes('$')){
+        throw newRxError('DB13', {
+            name: args.name,
+        });
+    }
+
     /**
      * The server-plugin has problems when a path with and ending slash is given
      * So we do not allow this.
@@ -39,13 +45,18 @@ export function ensureDatabaseNameIsValid(args: RxDatabaseCreator<any, any>) {
 
 
 
-const validCouchDBStringRegexStr = '^[a-z][_$a-z0-9\\-]*$';
+/**
+ * In contrast to CouchDB, we still allow inner uppercase letters
+ * like the name fooBar. This makes it way less confusing when naming
+ * collections with a JavaScript variable name convention.
+ */
+const validCouchDBStringRegexStr = '^[a-z][_$a-zA-Z0-9\\-]*$';
 const validCouchDBStringRegex = new RegExp(validCouchDBStringRegexStr);
 
 /**
  * Validates that a given string is ok to be used with couchdb-collection-names.
  * We only allow these strings as database- or collection names because it ensures
- * that you later do not get in troubble when you want to use the database together witch couchdb.
+ * that you later do not get in trouble when you want to use the database together witch couchdb.
  *
  * @link https://docs.couchdb.org/en/stable/api/database/common.html
  * @link https://neighbourhood.ie/blog/2020/10/13/everything-you-need-to-know-about-couchdb-database-names/
@@ -67,7 +78,14 @@ export function validateDatabaseName(name: string): true {
         return true;
     }
 
-    if (!name.match(validCouchDBStringRegex)) {
+    if (
+        !name.match(validCouchDBStringRegex) &&
+        /**
+         * The string ':memory:' is used in the SQLite RxStorage
+         * to persist data into a memory state. Often used in tests.
+         */
+        name !== ':memory:'
+    ) {
         throw newRxError('UT2', {
             regex: validCouchDBStringRegexStr,
             givenName: name,
