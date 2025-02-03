@@ -18,3 +18,10 @@ pouch__all_dbs__/
 .DS_Store
 .DS_Store?
 .eslintcache
+isolate-*
+release-body.md
+/test-db-*
+dist/typings
+*-debug.log
+.vscode
+ai-context.txt

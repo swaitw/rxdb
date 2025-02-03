@@ -1,28 +1,27 @@
-
-
-// monkey-patch
-// @link https://github.com/mysticatea/abort-controller/issues/7#issuecomment-380594899
-jest.mock("event-target-shim", () => ({
-  EventTarget: () => "EventTarget",
-  defineEventAttribute: () => "defineEventAttribute"
-}));
-jest.mock(
-  "abort-controller",
-  () =>
-    class AbortController {
-      abort() { }
-    }
-);
-
 import React from 'react';
+import { isRxDatabase } from 'rxdb';
+import initializeDb, { HeroesCollectionName } from "./initializeDb";
 
-import App from './App';
+const testDocument = {
+    name: 'test',
+    color: '#A47706'
+}
 
-import renderer from 'react-test-renderer';
+let db;
+
+it('Database initialization', async () => {
+    db = await initializeDb();
+    expect(isRxDatabase(db)).toBeTruthy();
+});
 
 
+it(`Add test doc and fetch it from ${HeroesCollectionName} collection`, async () => {
+    await db.collections[HeroesCollectionName].upsert(testDocument);
+    const docs = await db.collections[HeroesCollectionName].find({ selector: { name: testDocument.name }}).exec();
+    expect(docs.length).toBe(1);
+});
 
-it('renders without crashing', () => {
-  const rendered = renderer.create(<App />).toJSON();
-  expect(rendered).toBeTruthy();
+it(`close db`, async () => {
+    await db.close();
+    expect(true).toBeTruthy();
 });

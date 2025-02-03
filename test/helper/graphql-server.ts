@@ -4,32 +4,37 @@
  * @link https://graphql.org/graphql-js/running-an-express-graphql-server/
  */
 
-import graphQlClient from 'graphql-client';
 import { PubSub } from 'graphql-subscriptions';
 import {
     buildSchema,
     execute,
     subscribe
 } from 'graphql';
-import { createServer } from 'http';
-import { SubscriptionServer } from 'subscriptions-transport-ws';
+import { createServer } from 'node:http';
+import ws from 'ws';
+import { useServer } from 'graphql-ws/lib/use/ws';
 import { Request, Response, NextFunction } from 'express';
 
-const express = require('express');
+import express from 'express';
 // we need cors because this server is also used in browser-tests
-const cors = require('cors');
+import cors from 'cors';
 import { graphqlHTTP } from 'express-graphql';
 
 import {
     GRAPHQL_PATH,
     GRAPHQL_SUBSCRIPTION_PATH
-} from './graphql-config';
+} from './graphql-config.ts';
+import { ensureNotFalsy, lastOfArray } from 'event-reduce-js';
+import { RxReplicationWriteToMasterRow } from '../../plugins/core/index.mjs';
+import {
+    HumanWithTimestampDocumentType,
+    nextPort
+} from '../../plugins/test-utils/index.mjs';
+import { GraphQLServerUrl, RxGraphQLReplicationClientState } from '../../plugins/core/index.mjs';
 
-let lastPort = 16121;
-export function getPort() {
-    lastPort = lastPort + 1;
-    return lastPort;
-}
+import {
+    graphQLRequest
+} from '../../plugins/replication-graphql/index.mjs';
 
 function sortByUpdatedAtAndPrimary(
     a: any,
@@ -50,9 +55,8 @@ export interface GraphqlServer<T> {
     port: number;
     wsPort: number;
     subServer: any;
-    client: any;
-    url: string;
-    setDocument(doc: T): Promise<{ data: any }>;
+    url: GraphQLServerUrl;
+    setDocument(doc: T): Promise<{ data: any; }>;
     overwriteDocuments(docs: T[]): void;
     getDocuments(): T[];
     requireHeader(name: string, value: string): void;
@@ -60,7 +64,7 @@ export interface GraphqlServer<T> {
 }
 
 export interface GraphQLServerModule {
-    spawn<T>(docs?: T[]): Promise<GraphqlServer<T>>;
+    spawn<T = HumanWithTimestampDocumentType>(docs?: T[]): Promise<GraphqlServer<T>>;
 }
 
 declare type Human = {
@@ -73,8 +77,9 @@ declare type Human = {
 
 export async function spawn(
     documents: Human[] = [],
-    port = getPort()
+    portNumber?: number
 ): Promise<GraphqlServer<Human>> {
+    const port = portNumber ? portNumber : await nextPort();
     const app = express();
     app.use(cors());
 
@@ -83,38 +88,57 @@ export async function spawn(
      * matches ./schemas.js#humanWithTimestamp
      */
     const schema = buildSchema(`
+        type Checkpoint {
+            id: String!
+            updatedAt: Float!
+        }
+        input CheckpointInput {
+            id: String!
+            updatedAt: Float!
+        }
+        type FeedResponse {
+            documents: [Human!]!
+            checkpoint: Checkpoint!
+        }
         type Query {
             info: Int
-            feedForRxDBReplication(lastId: String!, minUpdatedAt: Int!, limit: Int!): [Human!]!
-            collectionFeedForRxDBReplication(lastId: String!, minUpdatedAt: Int!, offset: Int, limit: Int!): HumanCollection!
+            feedForRxDBReplication(checkpoint: CheckpointInput, limit: Int!): FeedResponse!
+            collectionFeedForRxDBReplication(checkpoint: CheckpointInput, limit: Int!): CollectionFeedResponse!
             getAll: [Human!]!
         }
         type Mutation {
-            setHuman(human: HumanInput): Human
-            setHumanFail(human: HumanInput): Human
+            writeHumans(writeRows: [HumanWriteRow!]): [Human!]
+            writeHumansFail(writeRows: [HumanWriteRow!]): [Human!]
+        }
+        input HumanWriteRow {
+            assumedMasterState: HumanInput,
+            newDocumentState: HumanInput!
         }
         input HumanInput {
             id: ID!,
             name: String!,
             age: Int!,
-            updatedAt: Int!,
+            updatedAt: Float!,
             deleted: Boolean!
         }
         type Human {
             id: ID!,
             name: String!,
             age: Int!,
-            updatedAt: Int!,
-            deleted: Boolean!
+            updatedAt: Float!,
+            deleted: Boolean!,
+            deletedAt: Float
         }
-        type HumanCollection {
-            collection: [Human!]
-            totalCount: Int!
+        input Headers {
+            token: String
+        }
+        type CollectionFeedResponse {
+            collection: FeedResponse!
+            count: Int!
         }
         type Subscription {
-            humanChanged: Human
+            humanChanged(headers: Headers): FeedResponse
         }
-
         schema {
             query: Query
             mutation: Mutation
@@ -123,7 +147,7 @@ export async function spawn(
     `);
 
     const pubsub = new PubSub();
-    /*pubsub.subscribe('humanChanged', data => {
+    /* pubsub.subscribe('humanChanged', data => {
         console.log('pubsub received!!');
         console.dir(data);
     });*/
@@ -132,18 +156,20 @@ export async function spawn(
     const root = {
         info: () => 1,
         collectionFeedForRxDBReplication: (args: any) => {
-            const { limit, offset = 0, ...feedForRxDBReplicationArgs } = args;
-            const collection = root.feedForRxDBReplication(feedForRxDBReplicationArgs);
+            const result = root.feedForRxDBReplication(args);
 
             // console.log('collection');
-            // console.dir(collection);
+            // console.dir(result);
 
             return {
-                totalCount: collection.length,
-                collection: collection.slice(offset, offset + limit)
+                collection: result,
+                count: result.documents.length
             };
         },
         feedForRxDBReplication: (args: any) => {
+            const lastId = args.checkpoint ? args.checkpoint.id : '';
+            const minUpdatedAt = args.checkpoint ? args.checkpoint.updatedAt : 0;
+
             // console.log('## feedForRxDBReplication');
             // console.dir(args);
             // sorted by updatedAt and primary
@@ -151,62 +177,85 @@ export async function spawn(
 
             // only return where updatedAt >= minUpdatedAt
             const filteredByMinUpdatedAtAndId = sortedDocuments.filter((doc) => {
-                if (doc.updatedAt < args.minUpdatedAt) return false;
-                if (doc.updatedAt > args.minUpdatedAt) return true;
-                if (doc.updatedAt === args.minUpdatedAt) {
-                    if (doc.id > args.lastId) return true;
-                    else return false;
+                if (doc.updatedAt < minUpdatedAt) {
+                    return false;
+                } else if (doc.updatedAt > minUpdatedAt) {
+                    return true;
+                } else if (doc.updatedAt === minUpdatedAt) {
+                    if (doc.id > lastId) {
+                        return true;
+                    } else return false;
                 }
             });
 
             // limit if requested
             const limited = args.limit ? filteredByMinUpdatedAtAndId.slice(0, args.limit) : filteredByMinUpdatedAtAndId;
 
-            /*
-            console.log('sortedDocuments:');
-            console.dir(sortedDocuments);
-            console.log('filterForMinUpdatedAt:');
-            console.dir(filterForMinUpdatedAtAndId);
-            console.log('return docs:');
-            console.dir(limited);
-*/
-            return limited;
+            const last = lastOfArray(limited);
+            const ret = {
+                documents: limited,
+                checkpoint: last ? {
+                    id: last.id,
+                    updatedAt: last.updatedAt
+                } : {
+                    id: lastId,
+                    updatedAt: minUpdatedAt
+                }
+            };
+            return ret;
         },
         getAll: () => {
             return documents;
         },
-        setHuman: (args: any) => {
-            // console.log('## setHuman()');
-            // console.dir(args);
-            const doc: Human = args.human;
-            const previousDoc = documents.find((d: Human) => d.id === doc.id);
-            documents = documents.filter((d: Human) => d.id !== doc.id);
-            doc.updatedAt = Math.ceil(new Date().getTime() / 1000);
+        writeHumans: (args: any) => {
+            const rows: RxReplicationWriteToMasterRow<Human>[] = args.writeRows;
 
-            // because javascript timer precission is not high enought,
-            // and we store seconds, not microseconds
-            // we have to ensure that the new updatedAt is always higher then the previous one
-            // otherwise the feed would not return updated documents some times
-            if (previousDoc && previousDoc.updatedAt >= doc.updatedAt) {
-                doc.updatedAt = doc.updatedAt + 1;
+
+            let last: Human | undefined = null as any;
+            const conflicts: Human[] = [];
+
+            const storedDocs = rows.map(row => {
+                const doc = row.newDocumentState;
+                const previousDoc = documents.find((d: Human) => d.id === doc.id);
+                if (
+                    (previousDoc && !row.assumedMasterState) ||
+                    (
+                        previousDoc && row.assumedMasterState &&
+                        previousDoc.updatedAt > row.assumedMasterState.updatedAt &&
+                        row.newDocumentState.deleted === previousDoc.deleted
+                    )
+                ) {
+                    conflicts.push(previousDoc);
+                    return;
+                }
+
+                documents = documents.filter((d: Human) => d.id !== doc.id);
+                documents.push(doc);
+
+                last = doc;
+                return doc;
+            });
+
+            if (last) {
+                pubsub.publish(
+                    'humanChanged',
+                    {
+                        humanChanged: {
+                            documents: storedDocs.filter(d => !!d),
+                            checkpoint: {
+                                id: ensureNotFalsy(last).id,
+                                updatedAt: ensureNotFalsy(last).updatedAt
+                            }
+                        },
+                    }
+                );
             }
 
-            documents.push(doc);
-
-            // console.log('server: setHuman(' + doc.id + ') with new updatedAt: ' + doc.updatedAt);
-            // console.dir(documents);
-
-            pubsub.publish(
-                'humanChanged',
-                {
-                    humanChanged: doc
-                }
-            );
-            return doc;
+            return conflicts;
         },
         // used in tests
-        setHumanFail: (args: any) => {
-            throw new Error('setHumanFail called');
+        writeHumansFail: (_args: any) => {
+            throw new Error('writeHumansFail called');
         },
         humanChanged: () => pubsub.asyncIterator('humanChanged')
     };
@@ -241,93 +290,124 @@ export async function spawn(
         graphiql: true,
     }));
 
-    const ret = 'http://localhost:' + port + GRAPHQL_PATH;
-    let client = graphQlClient({
-        url: ret
-    });
+    const httpUrl = 'http://localhost:' + port + GRAPHQL_PATH;
+    const clientState: RxGraphQLReplicationClientState = {
+        headers: {},
+        credentials: undefined
+    };
     const retServer: Promise<GraphqlServer<Human>> = new Promise(res => {
         const server = app.listen(port, function () {
 
             const wsPort = port + 500;
-            const ws = createServer(server);
-            ws.listen(wsPort, () => {
+            const wss = createServer(server);
+            const wsServer = new ws.Server({
+                server: wss,
+                path: GRAPHQL_SUBSCRIPTION_PATH,
+            });
+            const websocketUrl = 'ws://localhost:' + wsPort + GRAPHQL_SUBSCRIPTION_PATH;
+
+            wss.listen(wsPort, () => {
                 // console.log(`GraphQL Server is now running on http://localhost:${wsPort}`);
                 // Set up the WebSocket for handling GraphQL subscriptions
-                const subServer = new SubscriptionServer(
+                const subServer = useServer(
                     {
+                        onConnect: (ctx) => {
+                            if (reqHeaderName) { // Only check auth when required header was set
+                                const headers = ctx.connectionParams?.headers as Record<string, string>;
+                                if (headers[reqHeaderName] !== reqHeaderValue) {
+                                    return false;
+                                }
+                            }
+                        },
+                        schema,
                         execute,
                         subscribe,
-                        schema,
-                        rootValue: root
-                    }, {
-                    server: ws,
-                    path: GRAPHQL_SUBSCRIPTION_PATH,
-                }
+                        roots: {
+                            subscription: {
+                                humanChanged: root.humanChanged,
+                            },
+                        },
+                    },
+                    wsServer
                 );
 
                 res({
                     port,
                     wsPort,
                     subServer,
-                    client,
-                    url: ret,
-                    async setDocument(doc: any) {
-                        const result = await client.query(
-                            `
-            mutation CreateHuman($human: HumanInput) {
-                setHuman(human: $human) {
-                    id,
-                    updatedAt
-                }
-              }
+                    url: {
+                        http: httpUrl,
+                        ws: websocketUrl
+                    },
+                    async setDocument(doc: Human) {
 
-                        `, {
-                            human: doc
-                        }
+                        const previous = documents.find(d => d.id === doc.id);
+                        const row = {
+                            assumedMasterState: previous ? previous : undefined,
+                            newDocumentState: doc
+                        };
+
+
+                        const result = await graphQLRequest(
+                            fetch,
+                            httpUrl,
+                            clientState,
+                            {
+
+                                query: `
+                                    mutation CreateHumans($writeRows: [HumanWriteRow!]) {
+                                        writeHumans(writeRows: $writeRows) { id }
+                                    }
+                                `,
+                                operationName: 'CreateHumans',
+                                variables: {
+                                    writeRows: [row]
+                                }
+                            }
                         );
-                        // console.dir(result);
+                        if (result.data.writeHumans.length > 0) {
+                            throw new Error('setDocument() caused a conflict');
+                        }
                         return result;
                     },
                     overwriteDocuments(docs: any[]) {
                         documents = docs.slice();
                     },
                     getDocuments() {
-                        return documents;
+                        return documents.slice(0);
                     },
                     requireHeader(name: string, value: string) {
+                        reqHeaderName = name;
+                        reqHeaderValue = value;
                         if (!name) {
                             reqHeaderName = '';
                             reqHeaderValue = '';
-                            client = graphQlClient({
-                                url: ret
-                            });
+
+                            clientState.headers = {};
                         } else {
-                            reqHeaderName = name;
-                            reqHeaderValue = value;
-                            const headers: { [key: string]: string } = {};
-                            headers[name] = value;
-                            client = graphQlClient({
-                                url: ret,
-                                headers
-                            });
+                            clientState.headers = {
+                                [name]: value
+                            };
                         }
                     },
                     close(now = false) {
                         if (now) {
                             server.close();
-                            subServer.close();
+                            subServer.dispose();
                             return Promise.resolve();
                         } else {
                             return new Promise(res2 => {
                                 setTimeout(() => {
                                     server.close();
-                                    subServer.close();
+                                    subServer.dispose();
                                     res2();
                                 }, 1000);
                             });
                         }
                     }
                 });
+
+                return subServer;
             });
         });
     });

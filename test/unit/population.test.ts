@@ -1,23 +1,24 @@
 import assert from 'assert';
-import config from './config';
-import * as faker from 'faker';
-
-import * as humansCollection from '../helper/humans-collection';
+import config, { describeParallel } from './config.ts';
 
 import {
     createRxDatabase,
     isRxDocument,
-    randomCouchString,
+    randomToken,
     createRxSchema,
     RxJsonSchema,
-} from '../../plugins/core';
-
+    defaultHashSha256,
+    addRxPlugin,
+} from '../../plugins/core/index.mjs';
 import {
-    getRxStoragePouch
-} from '../../plugins/pouchdb';
+    humansCollection,
+    randomStringWithSpecialChars
+} from '../../plugins/test-utils/index.mjs';
+import { RxDBQueryBuilderPlugin } from '../../plugins/query-builder/index.mjs';
+addRxPlugin(RxDBQueryBuilderPlugin);
 
 
-config.parallel('population.test.js', () => {
+describeParallel('population.test.js', () => {
     describe('createRxSchema', () => {
         describe('positive', () => {
             it('should allow to create a schema with a relation', () => {
@@ -28,10 +29,11 @@ config.parallel('population.test.js', () => {
                     properties: {
                         bestFriend: {
                             ref: 'human',
-                            type: 'string'
+                            type: 'string',
+                            maxLength: 100
                         }
                     }
-                });
+                }, defaultHashSha256);
                 assert.strictEqual(schema.constructor.name, 'RxSchema');
             });
             /**
@@ -47,20 +49,22 @@ config.parallel('population.test.js', () => {
                     properties: {
                         bestFriend: {
                             ref: 'human',
-                            type: 'string'
+                            type: 'string',
+                            maxLength: 100
                         }
                     }
-                });
+                }, defaultHashSha256);
                 assert.strictEqual(schema.constructor.name, 'RxSchema');
             });
             it('should allow to create a schema with a relation in nested', () => {
-                const schema = createRxSchema({
+                const schema = createRxSchema<any>({
                     version: 0,
                     primaryKey: 'id',
                     type: 'object',
                     properties: {
                         id: {
                             type: 'string',
+                            maxLength: 100
                         },
                         foo: {
                             type: 'object',
@@ -72,17 +76,18 @@ config.parallel('population.test.js', () => {
                             }
                         }
                     }
-                });
+                }, defaultHashSha256);
                 assert.strictEqual(schema.constructor.name, 'RxSchema');
             });
             it('should allow to create relation of array', () => {
-                const schema = createRxSchema({
+                const schema = createRxSchema<any>({
                     version: 0,
                     primaryKey: 'id',
                     type: 'object',
                     properties: {
                         id: {
-                            type: 'string'
+                            type: 'string',
+                            maxLength: 100
                         },
                         friends: {
                             type: 'array',
@@ -92,17 +97,18 @@ config.parallel('population.test.js', () => {
                             }
                         }
                     }
-                });
+                }, defaultHashSha256);
                 assert.strictEqual(schema.constructor.name, 'RxSchema');
             });
             it('should allow to create relation with nullable string', () => {
-                const schema = createRxSchema({
+                const schema = createRxSchema<any>({
                     version: 0,
                     primaryKey: 'id',
                     type: 'object',
                     properties: {
                         id: {
-                            type: 'string'
+                            type: 'string',
+                            maxLength: 100
                         },
                         friends: {
                             type: 'array',
@@ -112,38 +118,39 @@ config.parallel('population.test.js', () => {
                             }
                         }
                     }
-                });
+                }, defaultHashSha256);
                 assert.strictEqual(schema.constructor.name, 'RxSchema');
             });
         });
         describe('negative', () => {
             it('throw if ref-type is no string', () => {
                 assert.throws(
-                    () => createRxSchema({
+                    () => createRxSchema<any>({
                         version: 0,
                         primaryKey: 'id',
                         type: 'object',
                         properties: {
                             id: {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             },
                             bestFriend: {
                                 ref: 'human'
                             }
                         }
-                    }),
-                    Error
+                    }, defaultHashSha256)
                 );
             });
             it('throw if ref-type is no string (array)', () => {
                 assert.throws(
-                    () => createRxSchema({
+                    () => createRxSchema<any>({
                         version: 0,
                         primaryKey: 'id',
                         type: 'object',
                         properties: {
                             id: {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             },
                             friends: {
                                 type: 'array',
@@ -152,8 +159,7 @@ config.parallel('population.test.js', () => {
                                 }
                             }
                         }
-                    }),
-                    Error
+                    }, defaultHashSha256)
                 );
             });
         });
@@ -166,7 +172,7 @@ config.parallel('population.test.js', () => {
                 const friend = await doc.populate('bestFriend');
                 assert.ok(isRxDocument(friend));
                 assert.strictEqual(friend.name, doc.bestFriend);
-                col.database.destroy();
+                col.database.close();
             });
             it('populate nested field', async () => {
                 const col = await humansCollection.createRelatedNested();
@@ -174,12 +180,12 @@ config.parallel('population.test.js', () => {
                 const friend = await doc.populate('foo.bestFriend');
                 assert.ok(isRxDocument(friend));
                 assert.strictEqual(friend.name, doc.foo.bestFriend);
-                col.database.destroy();
+                col.database.close();
             });
             it('populate string-array', async () => {
                 const db = await createRxDatabase({
-                    name: randomCouchString(10),
-                    storage: getRxStoragePouch('memory'),
+                    name: randomToken(10),
+                    storage: config.storage.getStorage(),
                 });
                 const cols = await db.addCollections({
                     human: {
@@ -189,7 +195,8 @@ config.parallel('population.test.js', () => {
                             type: 'object',
                             properties: {
                                 name: {
-                                    type: 'string'
+                                    type: 'string',
+                                    maxLength: 100
                                 },
                                 friends: {
                                     type: 'array',
@@ -207,7 +214,7 @@ config.parallel('population.test.js', () => {
                     .fill(0)
                     .map(() => {
                         return {
-                            name: faker.name.firstName() + randomCouchString(5),
+                            name: randomStringWithSpecialChars(3, 12),
                             friends: []
                         };
                     });
@@ -222,12 +229,12 @@ config.parallel('population.test.js', () => {
                 friendDocs.forEach((friend: any) => {
                     assert.ok(isRxDocument(friend));
                 });
-                db.destroy();
+                db.close();
             });
             it('populate with primary as ref', async () => {
                 const db = await createRxDatabase({
-                    name: randomCouchString(10),
-                    storage: getRxStoragePouch('memory'),
+                    name: randomToken(10),
+                    storage: config.storage.getStorage(),
                 });
                 const schema: RxJsonSchema<{ name: string; }> = {
                     version: 0,
@@ -236,6 +243,7 @@ config.parallel('population.test.js', () => {
                     properties: {
                         name: {
                             type: 'string',
+                            maxLength: 100,
                             ref: 'human2'
                         }
                     }
@@ -260,7 +268,7 @@ config.parallel('population.test.js', () => {
                 const doc2 = await doc.populate(doc.primaryPath);
                 assert.ok(doc2.collection === col2);
 
-                db.destroy();
+                db.close();
             });
         });
     });
@@ -272,7 +280,7 @@ config.parallel('population.test.js', () => {
                 const friend = await (doc as any).bestFriend_;
                 assert.ok(isRxDocument(friend));
                 assert.strictEqual(friend.name, doc.bestFriend);
-                col.database.destroy();
+                col.database.close();
             });
             it('populate nested field', async () => {
                 const col = await humansCollection.createRelatedNested();
@@ -280,15 +288,15 @@ config.parallel('population.test.js', () => {
                 const friend = await (doc as any).foo.bestFriend_;
                 assert.ok(isRxDocument(friend));
                 assert.strictEqual(friend.name, doc.foo.bestFriend);
-                col.database.destroy();
+                col.database.close();
             });
         });
     });
     describe('issues', () => {
         it('#222 population not working when multiInstance: false', async () => {
             const db = await createRxDatabase({
-                name: randomCouchString(10),
-                storage: getRxStoragePouch('memory'),
+                name: randomToken(10),
+                storage: config.storage.getStorage(),
                 multiInstance: false // this must be false here
             });
             const cols = await db.addCollections({
@@ -299,7 +307,8 @@ config.parallel('population.test.js', () => {
                         version: 0,
                         properties: {
                             name: {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             },
                             refB: {
                                 ref: 'docb', // refers to collection human
@@ -315,7 +324,8 @@ config.parallel('population.test.js', () => {
                         type: 'object',
                         properties: {
                             name: {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             },
                             somevalue: {
                                 type: 'string'
@@ -342,7 +352,7 @@ config.parallel('population.test.js', () => {
             assert.ok(isRxDocument(docB));
             assert.strictEqual(docB.somevalue, 'foobar');
 
-            db.destroy();
+            db.close();
         });
     });
 });

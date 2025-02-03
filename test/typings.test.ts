@@ -1,756 +1,541 @@
+/// <reference path="../node_modules/@types/mocha/index.d.ts" />
+/// <reference path="../node_modules/@types/assert/index.d.ts" />
+
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * this checks if typings work as expected
  */
-import assert from 'assert';
-import * as schemas from './helper/schemas';
-import config from './unit/config';
-import AsyncTestUtil from 'async-test-util';
+import * as assert from 'assert';
+import {
+    HumanCompositePrimaryDocType,
+    schemas
+} from '../plugins/test-utils/index.mjs';
+import {
+    createRxDatabase,
+    RxDatabase,
+    RxDatabaseCreator,
+    RxCollection,
+    RxCollectionCreator,
+    RxDocument,
+    RxJsonSchema,
+    RxError,
+    RxAttachment,
+    RxPlugin,
+    addRxPlugin,
+    createBlob
+} from '../plugins/core/index.mjs';
+import { getRxStorageMemory } from '../plugins/storage-memory/index.mjs';
 
-describe('typings.test.js', function () {
-    this.timeout(120 * 1000); // tests can take very long on slow devices like the CI
-    const codeBase = `
-        import {
-            createRxDatabase,
-            RxDatabase,
-            RxDatabaseCreator,
-            RxCollection,
-            RxCollectionCreator,
-            RxDocument,
-            RxJsonSchema,
-            RxError,
-            RxAttachment,
-            RxPlugin,
-            addRxPlugin,
-            addPouchPlugin,
-            getRxStoragePouch,
-            blobBufferUtil
-        } from '${config.rootPath}';
-        import * as PouchMemAdapter from 'pouchdb-adapter-memory';
-        addPouchPlugin(PouchMemAdapter);
-        const PouchHttpAdapter = require('pouchdb-adapter-http');
-        addPouchPlugin(PouchHttpAdapter);
+type DefaultDocType = {
+    passportId: string;
+    age: number;
+    oneOptional?: string;
+};
+type DefaultOrmMethods = {
+    foobar(): string;
+};
 
-        type DefaultDocType = {
-            passportId: string;
-            age: number;
-            oneOptional?: string;
-        };
-        type DefaultOrmMethods = {
-            foobar(): string;
-        };
-    `;
-    const transpileCode = async (code: string) => {
-        const spawn = require('child-process-promise').spawn;
-        const stdout: string[] = [];
-        const stderr: string[] = [];
-        const tsConfig = {
-            target: 'es6',
-            strict: true,
-            isolatedModules: false
-        };
-        const promise = spawn('ts-node', [
-            '--compiler-options',
-            JSON.stringify(tsConfig),
-            '-e', code
-        ]);
-        const childProcess = promise.childProcess;
-        const debug = false;
-        childProcess.stdout.on('data', (data: any) => {
-            if (debug) {
-                console.log(data.toString());
-            }
-            stdout.push(data.toString());
-        });
-        childProcess.stderr.on('data', (data: any) => {
-            if (debug) {
-                console.error('error: ' + data.toString());
-            }
-            stderr.push(data.toString());
-        });
-        try {
-            await promise;
-        } catch (err) {
-            throw new Error(`could not run
-                # Error: ${err}
-                # Output: ${stdout}
-                # ErrOut: ${stderr}
-                `);
-        }
-    };
+describe('typings.test.ts', function () {
 
-    config.parallel('basic', () => {
-        it('should sucess on basic test', async () => {
-            await transpileCode('console.log("Hello, world!")');
-        });
-        it('should fail on broken code', async () => {
-            const brokenCode = `
-                let x: string = 'foo';
-                x = 1337;
-            `;
-            let thrown = false;
-            try {
-                const code = await transpileCode(brokenCode);
-                console.dir(code);
-            } catch (err) {
-                thrown = true;
-            }
-            assert.ok(thrown);
+    describe('basic', () => {
+        it('should fail on broken code', () => {
+            let x: string = 'foo';
+            // @ts-expect-error not a string
+            x = 1337;
+            assert.ok(x);
         });
     });
-    config.parallel('import', () => {
-        it('import * with strict:true', async () => {
-            const code = `
-                import * as rxdb from '${config.rootPath}';
-                import * as PouchMemAdapter from 'pouchdb-adapter-memory';
-                rxdb.addPouchPlugin(PouchMemAdapter);
-            `;
-            await transpileCode(code);
-        });
-    });
-    config.parallel('database', () => {
+    describe('database', () => {
         describe('positive', () => {
             it('should create the database and use its methods', async () => {
-                const code = codeBase + `
-                    (async() => {
-                        const databaseCreator: RxDatabaseCreator = {
-                            name: 'mydb',
-                            storage: getRxStoragePouch('memory'),
-                            multiInstance: false,
-                            ignoreDuplicate: false
-                        };
-                        const myDb: RxDatabase = await createRxDatabase(databaseCreator);
-                        await myDb.destroy();
-                    })();
-                `;
-                await transpileCode(code);
+                const databaseCreator: RxDatabaseCreator = {
+                    name: 'mydb',
+                    storage: getRxStorageMemory(),
+                    multiInstance: false,
+                    ignoreDuplicate: false
+                };
+                const myDb: RxDatabase = await createRxDatabase(databaseCreator);
+                await myDb.close();
             });
-            it('allow to type-define the collections', async () => {
-                const code = codeBase + `
-                    (async() => {
-                        const db: RxDatabase<{
-                            foobar: RxCollection
-                        }> = {} as RxDatabase<{
-                            foobar: RxCollection
-                        }>;
-                        const col: RxCollection = db.foobar;
-                    })();
-                `;
-                await transpileCode(code);
+            it('allow to type-define the collections', () => {
+                const db: RxDatabase<{
+                    foobar: RxCollection;
+                }> = {} as RxDatabase<{
+                    foobar: RxCollection;
+                }>;
+                const col: RxCollection = db.foobar;
             });
-            it('a collection-untyped database should allow all collection-getters', async () => {
-                const code = codeBase + `
-                    (async() => {
-                        const db: RxDatabase = {} as RxDatabase;
-                        const col: RxCollection = db.foobar;
-                    })();
-                `;
-                await transpileCode(code);
+            it('a collection-untyped database should allow all collection-getters', () => {
+                const db: RxDatabase = {} as RxDatabase;
+                const col: RxCollection = db.foobar;
             });
-            it('an collection-TYPED database should allow to access methods', async () => {
-                const code = codeBase + `
-                    (async() => {
-                        const db: RxDatabase = {} as RxDatabase;
-                        const col: RxCollection = db.foobar;
-                    })();
-                `;
-                await transpileCode(code);
+            it('an collection-TYPED database should allow to access methods', () => {
+                const db: RxDatabase = {} as RxDatabase;
+                const col: RxCollection = db.foobar;
             });
             it('an allow to use a custom extends type', async () => {
-                const code = codeBase + `
-                    (async() => {
-                        type RxHeroesDatabase = RxDatabase<{
-                            hero: RxCollection;
-                        }>;
-                        const db: RxHeroesDatabase = await createRxDatabase<{
-                            hero: RxCollection;
-                        }>({
-                            name: 'heroes',
-                            storage: getRxStoragePouch('memory')
-                        });
-                        const col: RxCollection = db.hero;
-                        await db.destroy();
-                    })();
-                `;
-                await transpileCode(code);
+                type RxHeroesDatabase = RxDatabase<{
+                    hero: RxCollection;
+                }>;
+                const db: RxHeroesDatabase = await createRxDatabase<{
+                    hero: RxCollection;
+                }>({
+                    name: 'heroes',
+                    storage: getRxStorageMemory()
+                });
+                const col: RxCollection = db.hero;
+                await db.close();
             });
         });
         describe('negative', () => {
-            it('should not allow additional parameters', async () => {
-                const brokenCode = codeBase + `
-                    const databaseCreator: RxDatabaseCreator = {
-                        name: 'mydb',
-                        storage: getRxStoragePouch('memory'),
-                        multiInstance: false,
-                        ignoreDuplicate: false,
-                        foo: 'bar'
-                    };
-                `;
-                let thrown = false;
-                try {
-                    await transpileCode(brokenCode);
-                } catch (err) {
-                    thrown = true;
-                }
-                assert.ok(thrown);
+            it('should not allow additional parameters', () => {
+                const databaseCreator: RxDatabaseCreator = {
+                    name: 'mydb',
+                    storage: getRxStorageMemory(),
+                    multiInstance: false,
+                    ignoreDuplicate: false,
+                    // @ts-expect-error foo param does not exist
+                    foo: 'bar'
+                };
+                assert.ok(databaseCreator);
             });
-            it('an collection-TYPED database should only allow known collection-getters', async () => {
-                const brokenCode = codeBase + `
-                    (async() => {
-                        const db: RxDatabase<{
-                            foobar: RxCollection
-                        }> = {} as RxDatabase;
-                        const col: RxCollection = db.foobar;
-                        const col2: RxCollection = db.foobar2;
-                        db.destroy();
-                    })();
-                `;
-                let thrown = false;
-                try {
-                    await transpileCode(brokenCode);
-                } catch (err) {
-                    thrown = true;
-                }
-                assert.ok(thrown);
+            it('an collection-TYPED database should only allow known collection-getters', () => {
+                const db: RxDatabase<{
+                    foobar: RxCollection;
+                }> = {} as any;
+                const col: RxCollection = db.foobar;
+
+                // @ts-expect-error foobar2 does not exist
+                assert.ok(!db.foobar2);
             });
 
         });
     });
 
-    config.parallel('schema', () => {
+    describe('schema', () => {
         describe('positive', () => {
+            it('should work with DocType = any', () => {
+                const schema: RxJsonSchema<any> = schemas.humanMinimal;
+                assert.ok(schema);
+            });
             it('should allow creating generic schema based on a model', async () => {
-                const code = codeBase + `
-                    (async() => {
-                        const databaseCreator: RxDatabaseCreator = {
-                            name: 'mydb',
-                            storage: getRxStoragePouch('memory'),
-                            multiInstance: false,
-                            ignoreDuplicate: false
-                        };
-                        const myDb: RxDatabase = await createRxDatabase(databaseCreator);
-                        const minimalHuman: RxJsonSchema<DefaultDocType> = ${JSON.stringify(schemas.humanMinimal)};
-                        const myCollections = await myDb.addCollections({
-                            humans: {
-                                schema: minimalHuman,
-                            }
-                        });
-                        await myDb.destroy();
-                    })();
-                `;
-                await transpileCode(code);
+                const databaseCreator: RxDatabaseCreator = {
+                    name: 'mydb',
+                    storage: getRxStorageMemory(),
+                    multiInstance: false,
+                    ignoreDuplicate: false
+                };
+                const myDb: RxDatabase = await createRxDatabase(databaseCreator);
+                const minimalHuman: RxJsonSchema<DefaultDocType> = schemas.humanMinimal;
+                const myCollections = await myDb.addCollections({
+                    humans: {
+                        schema: minimalHuman,
+                    }
+                });
+                await myDb.close();
+            });
+            it('should allow \'as const\' composite primary schemas to work', () => {
+                const humanCompositePrimaryTyped: RxJsonSchema<HumanCompositePrimaryDocType> = schemas.humanCompositePrimarySchemaLiteral;
             });
         });
         describe('negative', () => {
             it('should not allow wrong properties when passing a model', async () => {
-                const brokenCode = codeBase + `
-                    (async() => {
-                        const databaseCreator: RxDatabaseCreator = {
-                            name: 'mydb',
-                            storage: getRxStoragePouch('memory'),
-                            multiInstance: false,
-                            ignoreDuplicate: false
-                        };
-                        const myDb: RxDatabase = await createRxDatabase(databaseCreator);
+                const databaseCreator: RxDatabaseCreator = {
+                    name: 'mydb',
+                    storage: getRxStorageMemory(),
+                    multiInstance: false,
+                    ignoreDuplicate: false
+                };
+                const myDb: RxDatabase = await createRxDatabase(databaseCreator);
 
-                        const minimalHuman: RxJsonSchema<DefaultDocType> = ${JSON.stringify(schemas.humanMinimalBroken)};
-                        const myCollections = await myDb.addCollections({
-                            humans: {
-                                schema: minimalHuman,
-                            }
-                        });
-
-                        await myDb.destroy();
-                    })();
-                `;
-                let thrown = false;
-                try {
-                    await transpileCode(brokenCode);
-                } catch (err) {
-                    thrown = true;
-                }
-                assert.ok(thrown);
+                // @ts-expect-error broken schema
+                const minimalHuman: RxJsonSchema<DefaultDocType> = schemas.humanMinimalBroken;
+                await myDb.close();
             });
 
         });
     });
 
-    config.parallel('collection', () => {
+    describe('collection', () => {
         describe('positive', () => {
             it('collection-creation', async () => {
-                const code = codeBase + `
-                    (async() => {
-                        const myDb: RxDatabase = await createRxDatabase({
-                            name: 'mydb',
-                            storage: getRxStoragePouch('memory'),
-                            multiInstance: false,
-                            ignoreDuplicate: false
-                        });
-                        const mySchema: RxJsonSchema<any> = ${JSON.stringify(schemas.human)};
-                        const cols = await myDb.addCollections({
-                            humans: {
-                                schema: mySchema,
-                                autoMigrate: false,
-                            }
-                        });
-                        const myCollections: RxCollection<any> = cols.humans;
-                    })();
-                `;
-                await transpileCode(code);
+                const myDb: RxDatabase = await createRxDatabase({
+                    name: 'mydb',
+                    storage: getRxStorageMemory(),
+                    multiInstance: false,
+                    ignoreDuplicate: false
+                });
+                const mySchema: RxJsonSchema<any> = schemas.human;
+                const cols = await myDb.addCollections({
+                    humans: {
+                        schema: mySchema,
+                        autoMigrate: false,
+                    }
+                });
+                const myCollections: RxCollection<any> = cols.humans;
             });
             it('typed collection should know its static orm methods', async () => {
-                const code = codeBase + `
-                    (async() => {
-                        const myDb: RxDatabase = await createRxDatabase({
-                            name: 'mydb',
-                            storage: getRxStoragePouch('memory'),
-                            multiInstance: false,
-                            ignoreDuplicate: false
-                        });
-                        const mySchema: RxJsonSchema<any> = ${JSON.stringify(schemas.human)};
-
-                        type staticMethods = {
-                            countAllDocuments: () => Promise<number>;
+                const myDb: RxDatabase = await createRxDatabase({
+                    name: 'mydb',
+                    storage: getRxStorageMemory(),
+                    multiInstance: false,
+                    ignoreDuplicate: false
+                });
+                const mySchema: RxJsonSchema<any> = schemas.human;
+                type staticMethods = {
+                    countAllDocuments: () => Promise<number>;
+                };
+                const myCollections = await myDb.addCollections({
+                    humans: {
+                        schema: mySchema,
+                        autoMigrate: false,
+                        statics: {
+                            countAllDocuments: () => Promise.resolve(1)
                         }
-                        const myCollections = await myDb.addCollections({
-                            humans: {
-                                schema: mySchema,
-                                autoMigrate: false,
-                                statics: {
-                                    countAllDocuments: () => Promise.resolve(1)
-                                }
-                            }
-                        });
-                        const myCollection: RxCollection<any, any, staticMethods> = myCollections.humans as any;
-
-                        await myCollection.countAllDocuments();
-                    })();
-                `;
-                await transpileCode(code);
+                    }
+                });
+                const myCollection: RxCollection<any, any, staticMethods> = myCollections.humans as any;
+                await myCollection.countAllDocuments();
             });
             it('use options', async () => {
-                const code = codeBase + `
-                    (async() => {
-                        const myDb: RxDatabase = await createRxDatabase({
-                            name: 'mydb',
-                            storage: getRxStoragePouch('memory'),
-                            multiInstance: false,
-                            ignoreDuplicate: false,
-                            options: {
-                                foo1: 'bar1'
-                            }
-                        });
-                        const mySchema: RxJsonSchema<any> = ${JSON.stringify(schemas.human)};
-                        const myCollections = await myDb.addCollections({
-                            humans: {
-                                schema: mySchema,
-                                autoMigrate: false,
-                                options: {
-                                    foo2: 'bar2'
-                                }
-                            }
-                        });
-                        const x: string = myDb.options.foo1;
-                        const y: string = myCollections.humans.options.foo2;
-                        myDb.destroy();
-                    })();
-                `;
-                await transpileCode(code);
-            });
-            it('use underlaying pouchdb', async () => {
-                const code = codeBase + `
-                    (async() => {
-                        const myDb: RxDatabase = await createRxDatabase({
-                            name: 'mydb',
-                            storage: getRxStoragePouch('memory'),
-                            multiInstance: false,
-                            ignoreDuplicate: false,
-                            options: {
-                                foo1: 'bar1'
-                            }
-                        });
-                        const mySchema: RxJsonSchema<any> = ${JSON.stringify(schemas.human)};
-                        type docType = {
-                                foo: string
-                        };
-                        const cols = await myDb.addCollections({
-                            humans: {
-                                schema: mySchema,
-                                autoMigrate: false,
-                                options: {
-                                    foo2: 'bar2'
-                                }
-                            }
-                        });
-                        const myCollection: RxCollection<docType> = cols.humans;
-                        const result = await myCollection.storageInstance.internals.pouch.put({
-                            _id: 'foobar',
-                            foo: 'bar'
-                        });
-                        const docs = await myCollection.storageInstance.internals.pouch.allDocs();
-                    })();
-                `;
-                await transpileCode(code);
+                const myDb: RxDatabase = await createRxDatabase({
+                    name: 'mydb',
+                    storage: getRxStorageMemory(),
+                    multiInstance: false,
+                    ignoreDuplicate: false,
+                    options: {
+                        foo1: 'bar1'
+                    }
+                });
+                const mySchema: RxJsonSchema<any> = schemas.human;
+                const myCollections = await myDb.addCollections({
+                    humans: {
+                        schema: mySchema,
+                        autoMigrate: false,
+                        options: {
+                            foo2: 'bar2'
+                        }
+                    }
+                });
+                const x: string = myDb.options.foo1;
+                const y: string = myCollections.humans.options.foo2;
+                myDb.close();
             });
         });
         describe('negative', () => {
             it('should not allow wrong collection-settings', async () => {
-                const brokenCode = codeBase + `
-                    (async() => {
-                        const myDb: RxDatabase = await createRxDatabase({
-                            name: 'mydb',
-                            storage: getRxStoragePouch('memory'),
-                            multiInstance: false,
-                            ignoreDuplicate: false
-                        });
-                        const mySchema: RxJsonSchema<any> = ${JSON.stringify(schemas.human)};
-                        await myDb.addCollections({
-                            humans: {
-                                schema: {}, // wrong schema format
-                                autoMigrate: false,
-                            }
-                        });
-                    })();
-                `;
-                let thrown = false;
-                try {
-                    await transpileCode(brokenCode);
-                } catch (err) {
-                    thrown = true;
-                }
-                assert.ok(thrown);
+                const myDb: RxDatabase = await createRxDatabase({
+                    name: 'mydb',
+                    storage: getRxStorageMemory(),
+                    multiInstance: false,
+                    ignoreDuplicate: false
+                });
+                await myDb.addCollections({
+                    humans: {
+                        // @ts-expect-error because of wrong schema format
+                        schema: {},
+                        autoMigrate: false,
+                    }
+                });
+                await myDb.close();
             });
         });
     });
-    config.parallel('change-event', () => {
+    describe('change-event', () => {
         it('.insert$ .update$ .remove$', async () => {
-            const code = codeBase + `
-                (async() => {
-                    const myDb: RxDatabase = await createRxDatabase({
-                        name: 'mydb',
-                        storage: getRxStoragePouch('memory'),
-                        multiInstance: false,
-                        ignoreDuplicate: false
-                    });
-                    type docType = {
-                        firstName: string,
-                        lastName: string
-                    }
-                    const mySchema: RxJsonSchema<any> = ${JSON.stringify(schemas.human)};
-                    const myCollections = await myDb.addCollections({
-                        humans: {
-                            schema: mySchema,
-                            autoMigrate: false,
-                        }
-                    });
+            const myDb: RxDatabase = await createRxDatabase({
+                name: 'mydb',
+                storage: getRxStorageMemory(),
+                multiInstance: false,
+                ignoreDuplicate: false
+            });
+            type docType = {
+                firstName: string;
+                lastName: string;
+            };
+            const mySchema: RxJsonSchema<any> = schemas.human;
+            const myCollections = await myDb.addCollections({
+                humans: {
+                    schema: mySchema,
+                    autoMigrate: false,
+                }
+            });
 
-                    const names: string[] = [];
-                    const revs: string[] = [];
-                    const sub1 = myCollections.humans.insert$.subscribe(cE => {
-                        names.push(cE.documentData.firstName);
-                        revs.push(cE.documentData._rev);
-                    });
-                })();
-            `;
-            await transpileCode(code);
+            const names: string[] = [];
+            const revs: string[] = [];
+            const sub1 = myCollections.humans.insert$.subscribe(cE => {
+                names.push(cE.documentData.firstName);
+                revs.push(cE.documentData._rev);
+            });
         });
     });
-    config.parallel('document', () => {
+    describe('document', () => {
         it('should know the fields of the document', async () => {
-            const code = codeBase + `
-                (async() => {
-                    const myDb: any = {};
+            const myDb: any = {};
+            type DocType = {
+                age: number;
+                firstName: string;
+                lastName: string;
+                passportId: string;
+            };
+            const myCollections = await myDb.addCollections({
+                humans: {
+                    schema: {},
+                    autoMigrate: false,
+                }
+            });
 
-                    type DocType = {
-                        age: number,
-                        firstName: string,
-                        lastName: string,
-                        passportId: string
-                    };
+            const result = await myCollections.humans.findOne().exec();
+            if (result === null) throw new Error('got no document');
+            const oneDoc: RxDocument<DocType> = result;
+            const id: string = oneDoc.passportId;
+            const prim: string = oneDoc.primary;
 
-                    const myCollections = await myDb.addCollections({
-                        humans: {
-                            schema: {},
-                            autoMigrate: false,
-                        }
-                    });
+            const otherResult = await myCollections.humans.findOne().exec();
+            if (otherResult === null) throw new Error('got no other document');
+            const otherDoc: RxDocument<DocType> = otherResult;
+            const id2 = otherDoc.passportId;
+        });
+        it('should know the age$ observables', () => {
+            type DocType = {
+                age: number;
+                nes: {
+                    ted: string;
+                };
+            };
+            const oneDoc: RxDocument<DocType> = {} as any;
 
-                    const result = await myCollections.humans.findOne().exec();
-                    if(result === null) throw new Error('got no document');
-                    const oneDoc: RxDocument<DocType> = result;
-                    const id: string = oneDoc.passportId;
-                    const prim: string = oneDoc.primary;
-
-                    const otherResult = await myCollections.humans.findOne().exec();
-                    if(otherResult === null) throw new Error('got no other document');
-                    const otherDoc: RxDocument<DocType> = otherResult;
-                    const id2 = otherDoc.passportId;
-                });
-            `;
-            await transpileCode(code);
+            // top level
+            const observable = oneDoc.age$;
+            observable.subscribe();
         });
         it('.putAttachment()', async () => {
-            const code = codeBase + `
-                (async() => {
-                    const myDb: any = {};
+            const myDb: any = {};
 
-                    type DocType = {
-                        age: number,
-                        firstName: string,
-                        lastName: string,
-                        passportId: string
-                    };
+            type DocType = {
+                age: number;
+                firstName: string;
+                lastName: string;
+                passportId: string;
+            };
 
-                    const myCollections = await myDb.addCollections({
-                        humans: {
-                            schema: {},
-                            autoMigrate: false,
-                        }
-                    });
+            const myCollections = await myDb.addCollections({
+                humans: {
+                    schema: {},
+                    autoMigrate: false,
+                }
+            });
 
-                    const result = await myCollections.humans.findOne().exec(true);
-                    const oneDoc: RxDocument<DocType> = result;
-                    const attachment: RxAttachment<DocType> = await oneDoc.putAttachment({
-                        id: 'cat.txt',
-                        data: blobBufferUtil.createBlobBuffer('foo bar', 'text/plain'),
-                        type: 'text/plain'
-                    });
-                });
-            `;
-            await transpileCode(code);
+            const result = await myCollections.humans.findOne().exec(true);
+            const oneDoc: RxDocument<DocType> = result;
+            const attachment: RxAttachment<DocType> = await oneDoc.putAttachment({
+                id: 'cat.txt',
+                data: createBlob('foo bar', 'text/plain'),
+                type: 'text/plain'
+            });
         });
         it('.toJSON() should have _rev', async () => {
-            const code = codeBase + `
-                (async() => {
-                    const myDb: any = {};
+            const myDb: any = {};
 
-                    type DocType = {
-                        age: number,
-                        firstName: string,
-                        lastName: string,
-                        passportId: string
-                    };
+            type DocType = {
+                age: number;
+                firstName: string;
+                lastName: string;
+                passportId: string;
+            };
 
-                    const myCollections = await myDb.addCollections({
-                        humans: {
-                            schema: {},
-                            autoMigrate: false,
-                        }
-                    });
+            const myCollections = await myDb.addCollections({
+                humans: {
+                    schema: {},
+                    autoMigrate: false,
+                }
+            });
 
-                    const result = await myCollections.humans.findOne().exec(true);
-                    const rev: string = result.toJSON(true)._rev;
-                });
-            `;
-            await transpileCode(code);
+            const result = await myCollections.humans.findOne().exec(true);
+            const rev: string = result.toJSON(true)._rev;
         });
         it('.toJSON(false) should not have _rev', async () => {
-            const code = codeBase + `
-                (async() => {
-                    const myDb: any = {};
+            const myDb: any = {};
 
-                    type DocType = {
-                        age: number,
-                        firstName: string,
-                        lastName: string,
-                        passportId: string
-                    };
+            type DocType = {
+                age: number;
+                firstName: string;
+                lastName: string;
+                passportId: string;
+            };
 
-                    const myCollections = await myDb.addCollections({
-                        humans: {
-                            schema: {},
-                            autoMigrate: false,
-                        }
-                    });
-                    const collection: RxCollection<{}> = myCollections.humans;
+            const myCollections = await myDb.addCollections({
+                humans: {
+                    schema: {},
+                    autoMigrate: false,
+                }
+            });
+            const collection: RxCollection<{}> = myCollections.humans;
 
-                    const result = await collection.findOne().exec(true);
-                    const rev: string = result.toJSON(false)._rev;
-                });
-            `;
-            await AsyncTestUtil.assertThrows(
-                () => transpileCode(code),
-                Error,
-                '_rev'
-            );
+            const result = await collection.findOne().exec(true);
+
+            // @ts-expect-error must not have _rev
+            const rev: string = result.toJSON(false)._rev;
         });
-        it('.atomicUpdate()', async () => {
-            const code = codeBase + `
-                (async() => {
-                    const myDb: any = {};
-                    type DocType = {
-                        age: number,
-                        firstName: string,
-                        lastName: string,
-                        passportId: string
-                    };
+        it('.incrementalModify()', async () => {
+            const myDb: any = {};
+            type DocType = {
+                age: number;
+                firstName: string;
+                lastName: string;
+                passportId: string;
+            };
 
-                    const myCollections = await myDb.addCollections({
-                        humans: {
-                            schema: {},
-                            autoMigrate: false,
-                        }
-                    });
-                    const collection: RxCollection<DocType> = myCollections.humans;
-                    const doc = await collection.findOne().exec(true);
-                    await doc.atomicUpdate(docData => {
-                        const newData = {
-                            age: 23,
-                            firstName: 'bar',
-                            lastName: 'steve',
-                            passportId: 'lolol'
-                        };
-                        return newData;
-                    });
-                });
-            `;
-            await transpileCode(code);
+            const myCollections = await myDb.addCollections({
+                humans: {
+                    schema: {},
+                    autoMigrate: false,
+                }
+            });
+            const collection: RxCollection<DocType> = myCollections.humans;
+            const doc = await collection.findOne().exec(true);
+            await doc.incrementalModify(docData => {
+                const newData = {
+                    age: 23,
+                    firstName: 'bar',
+                    lastName: 'steve',
+                    passportId: 'lolol'
+                };
+                return newData;
+            });
         });
     });
-    config.parallel('local documents', () => {
-        it('should allow to type input data', async () => {
-            const code = codeBase + `
-            (async() => {
-                const myDb: RxDatabase = {} as any;
-                const typedLocalDoc = await myDb.getLocal<{foo: string;}>('foobar');
-                const typedLocalDocInsert = await myDb.insertLocal<{foo: string;}>('foobar', { bar: 'foo' });
+    describe('reactivity', () => {
+        type MyCustomReactivity<T> = Set<T>;
+        type DocType = {
+            age: number;
+            firstName: string;
+            lastName: string;
+            passportId: string;
+        };
+        /**
+         * @link https://github.com/pubkey/rxdb/pull/6189
+         */
+        it('#6189 should know the type of the custom reactivity object', () => {
+            type DbCollections = {
+                smth: RxCollection<DocType, unknown, unknown, unknown, MyCustomReactivity<unknown>>;
+            };
+            type Db = RxDatabase<DbCollections, unknown, unknown, MyCustomReactivity<unknown>>;
+            const db: Db = {} as any;
+            const data: MyCustomReactivity<any> = db.smth.find().$$;
 
-                if (!typedLocalDoc) {
-                    throw new Error('local doc missing');
-                }
-
-                const x: string = typedLocalDoc.foo;
-                const x2: string = typedLocalDocInsert.foo;
-            });
-            `;
-            await AsyncTestUtil.assertThrows(
-                () => transpileCode(code),
-                Error
-            );
-        });
-        it('should allow to type the return data', async () => {
-            const code = codeBase + `
-            (async() => {
-                const myDb: RxDatabase = {} as any;
-                const typedLocalDoc = await myDb.getLocal<{foo: string;}>('foobar');
-                const typedLocalDocUpsert = await myDb.upsertLocal<{foo: string;}>('foobar', { foo: 'bar' });
-
-                if (!typedLocalDoc) {
-                    throw new Error('local doc missing');
-                }
-
-                const x: string = typedLocalDoc.foo;
-                const x2: string = typedLocalDocUpsert.foo;
-            });
-            `;
-            await transpileCode(code);
-        });
-        it('should allow to access differnt property', async () => {
-            const code = codeBase + `
-            (async() => {
-                const myDb: RxDatabase = {} as any;
-                const typedLocalDoc = await myDb.getLocal<{foo: string;}>('foobar');
-                const x: string = typedLocalDoc.bar;
-            });
-            `;
-            await AsyncTestUtil.assertThrows(
-                () => transpileCode(code),
-                Error
-            );
+            // @ts-expect-error should be invalid because MyCustomReactivity is not a number
+            const dataWrong: number = db.smth.find().$$;
         });
     });
-    config.parallel('other', () => {
-        describe('orm', () => {
-            it('should correctly recognize orm-methods', async () => {
-                const code = codeBase + `
-                (async() => {
-                    const myDb: any = {};
+});
+describe('local documents', () => {
+    it('should allow to type input data', async () => {
+        const myDb: RxDatabase = {} as any;
+        const typedLocalDoc = await myDb.getLocal<{ foo: string; }>('foobar');
 
-                    const myCollections = await myDb.addCollections({
-                        humans: {
-                            schema: {},
-                            methods: {
-                                foobar(){
-                                    return 'foobar';
-                                }
-                            }
+        // @ts-expect-error does not have 'bar'
+        const typedLocalDocInsert = await myDb.insertLocal<{ foo: string; }>('foobar', { bar: 'foo' });
+
+        if (!typedLocalDoc) {
+            throw new Error('local doc missing');
+        }
+    });
+    it('should allow to type the return data', async () => {
+        const myDb: RxDatabase = {} as any;
+        const typedLocalDoc = await myDb.getLocal<{ foo: string; }>('foobar');
+        const typedLocalDocUpsert = await myDb.upsertLocal<{ foo: string; }>('foobar', { foo: 'bar' });
+
+        if (!typedLocalDoc) {
+            throw new Error('local doc missing');
+        }
+
+        const x: string = typedLocalDoc.get('data').foo;
+        const x2: string = typedLocalDocUpsert.get('data').foo;
+    });
+    it('should allow to access different property', async () => {
+        const myDb: RxDatabase = {} as any;
+        const typedLocalDoc = await myDb.getLocal<{ foo: string; }>('foobar');
+        if (typedLocalDoc) {
+            // @ts-expect-error must not have 'bar'
+            const x: string = typedLocalDoc._data.bar;
+        }
+    });
+});
+describe('other', () => {
+    describe('orm', () => {
+        it('should correctly recognize orm-methods', async () => {
+            const myDb: any = {};
+
+            const myCollections = await myDb.addCollections({
+                humans: {
+                    schema: {},
+                    methods: {
+                        foobar() {
+                            return 'foobar';
                         }
-                    });
-                    const myCollection: RxCollection<DefaultDocType, DefaultOrmMethods, {}> = myCollections.humans;
-
-                    // via insert
-                    const doc = await myCollection.insert({
-                        passportId: 'asdf',
-                        age: 10
-                    });
-                    const x: string = doc.foobar();
-
-                    // via query findOne()
-                    const doc2 = await myCollection.findOne('asdf').exec(true);
-                    const x2: string = doc.foobar();
-                });
-                `;
-                await transpileCode(code);
+                    }
+                }
             });
+            const myCollection: RxCollection<DefaultDocType, DefaultOrmMethods, {}> = myCollections.humans;
+
+            // via insert
+            const doc = await myCollection.insert({
+                passportId: 'asdf',
+                age: 10
+            });
+            const x: string = doc.foobar();
+
+            // via query findOne()
+            const doc2 = await myCollection.findOne('asdf').exec(true);
+            const x2: string = doc.foobar();
         });
-        describe('hooks', () => {
-            it('should know the types', async () => {
-                const code = codeBase + `
-                (async() => {
-                    const myDb: any = {};
-                    const myCollections = await myDb.addCollections({
-                        humans: {
-                            schema: {}
-                        }
-                    });
-                    const myCollection: RxCollection<DefaultDocType, DefaultOrmMethods> = myCollections.humans;
-                    let myNumber: number;
-                    let myString: string;
-                    myCollection.postInsert((data, doc) => {
-                            myNumber = doc.age;
-                            myNumber = data.age;
-                            myString = doc.foobar();
-                            return Promise.resolve();
-                    }, true);
-                });
-            `;
-                await transpileCode(code);
+    });
+    describe('hooks', () => {
+        it('should know the types', async () => {
+            const myDb: any = {};
+            const myCollections = await myDb.addCollections({
+                humans: {
+                    schema: {}
+                }
             });
+            const myCollection: RxCollection<DefaultDocType, DefaultOrmMethods> = myCollections.humans;
+            let myNumber: number;
+            let myString: string;
+            myCollection.postInsert((data, doc) => {
+                myNumber = doc.age;
+                myNumber = data.age;
+                myString = doc.foobar();
+                return Promise.resolve();
+            }, true);
         });
         describe('query', () => {
             it('should know the where-fields', async () => {
-                const code = codeBase + `
-                (async() => {
-                    const myDb: any = {};
+                const myDb: any = {};
 
-                    type DocType = {
-                        age: number,
-                        firstName: string,
-                        lastName: string,
-                        passportId: string,
-                        nestedObject: {
-                            foo: string,
-                            bar: number
-                        }
+                type DocType = {
+                    age: number;
+                    firstName: string;
+                    lastName: string;
+                    passportId: string;
+                    nestedObject: {
+                        foo: string;
+                        bar: number;
                     };
+                };
 
-                    const myCollections = await myDb.addCollections({
-                        humans: {
-                            schema: {},
-                            autoMigrate: false,
-                        }
-                    });
-                    const myCollection: RxCollection<DocType> = myCollections.humans;
-
-                    const query = myCollection.findOne().where('nestedObject.foo').eq('foobar');
+                const myCollections = await myDb.addCollections({
+                    humans: {
+                        schema: {},
+                        autoMigrate: false,
+                    }
                 });
-            `;
-                await transpileCode(code);
+                const myCollection: RxCollection<DocType> = myCollections.humans;
+
+                const query = myCollection.findOne().where('nestedObject.foo').eq('foobar');
             });
-        });
-        describe('rx-error', () => {
-            it('should know the parameters of the error', async () => {
-                const code = codeBase + `
-                (async() => {
+            describe('rx-error', () => {
+                it('should know the parameters of the error', async () => {
                     const myDb: any = {};
                     const myCollections = await myDb.addCollections({
                         humans: {
@@ -759,49 +544,31 @@ describe('typings.test.js', function () {
                         }
                     });
 
-                    try{
-                        await myCollections.humans.insert({ age: 4});
-                    } catch(err) {
+                    try {
+                        await myCollections.humans.insert({ age: 4 });
+                    } catch (err) {
                         if ((err as any).rxdb) {
-                            (err as RxError).parameters.errors;
+                            assert.ok((err as RxError).parameters.errors);
                         } else {
                             // handle regular Error class
                         }
                     }
                 });
-            `;
-                await transpileCode(code);
             });
-        });
-        describe('addRxPlugin', () => {
-            it('should be a valid RxPlugin', async () => {
-                const code = codeBase + `
-                (async() => {
+            describe('addRxPlugin', () => {
+                it('should be a valid RxPlugin', () => {
                     const myPlugin: RxPlugin = {
                         name: 'my-plugin',
                         rxdb: true,
                         prototypes: {
-                            RxDocument: () => {}
+                            RxDocument: () => { }
                         }
-                    }
+                    };
                     addRxPlugin(myPlugin);
                 });
-            `;
-                await transpileCode(code);
             });
-            it('should be able to import and add a plugin', async () => {
-                const code = codeBase + `
-                import { RxDBReplicationGraphQLPlugin } from '${config.rootPath}plugins/replication-graphql';
-                addRxPlugin(RxDBReplicationGraphQLPlugin);
-            `;
-                await transpileCode(code);
-            });
-        });
-    });
-    config.parallel('issues', () => {
-        it('via gitter at 2018 Mai 22 19:20', async () => {
-            const code = codeBase + `
-                (async() => {
+            describe('issues', () => {
+                it('via gitter at 2018 Mai 22 19:20', () => {
                     const db: RxDatabase = {} as RxDatabase;
                     const heroSchema = {
                         version: 0,
@@ -813,13 +580,40 @@ describe('typings.test.js', function () {
                             }
                         },
                         required: ['color']
-                    }
+                    };
                     const colCreator: RxCollectionCreator = {
                         schema: heroSchema
                     };
-                })();
-            `;
-            await transpileCode(code);
+                });
+                it('nested selector type not working', () => {
+                    type DocType = {
+                        id?: string;
+                        timestamp: number;
+                        meta: {
+                            user: string;
+                        };
+                    };
+                    type RxCollectionIssue = RxCollection<DocType>;
+                    const collection: RxCollectionIssue = {} as any;
+                    const query = collection.find({
+                        selector: {
+                            'meta.user': 'foobar',
+                            id: {
+                                $exists: true
+                            },
+                            timestamp: {
+                                $exists: true,
+                                $gt: 1000
+                            }
+                        },
+                        limit: 10,
+                        sort: [
+                            { id: 'asc' },
+                            { timestamp: 'asc' }
+                        ]
+                    });
+                });
+            });
         });
     });
 });

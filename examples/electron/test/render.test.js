@@ -1,9 +1,17 @@
 const assert = require('assert');
 const {
+    createRxDatabase,
     addRxPlugin,
-    createRxDatabase
-} = require('../../../');
-addRxPlugin(require('pouchdb-adapter-idb'));
+    getBroadcastChannelReference,
+    createBlob
+} = require('rxdb');
+const { RxDBLeaderElectionPlugin } = require('rxdb/plugins/leader-election');
+const { RxDBAttachmentsPlugin } = require('rxdb/plugins/attachments');
+const { getRxStorageMemory } = require('rxdb/plugins/storage-memory');
+const { wrappedValidateAjvStorage } = require('rxdb/plugins/validate-ajv');
+
+addRxPlugin(RxDBLeaderElectionPlugin);
+addRxPlugin(RxDBAttachmentsPlugin);
 
 
 /**
@@ -12,42 +20,51 @@ addRxPlugin(require('pouchdb-adapter-idb'));
  */
 module.exports = (function () {
     const runTests = async function () {
-        // issue #587 Icorrect working attachments in electron-render
+        // issue #587 Incorrect working attachments in electron-render
         await (async function () {
             const db = await createRxDatabase({
-                name: 'foobar587' + new Date().getTime(),
-                adapter: 'idb',
+                // generate simple random ID to avoid conflicts when running tests at the same time
+                name: 'foobar587' + Math.round(Math.random() * 0xffffff).toString(16),
+                storage: wrappedValidateAjvStorage({ storage: getRxStorageMemory() }),
                 password: 'myLongAndStupidPassword',
                 multiInstance: true
             });
 
             await db.waitForLeadership();
-            if (db.broadcastChannel.method.type !== 'native') {
+
+            const broadcastChannel = getBroadcastChannelReference(
+                db.token,
+                db.name,
+                {}
+            );
+
+            if (broadcastChannel.method.type !== 'native') {
                 throw new Error('wrong BroadcastChannel-method chosen: ' + db.broadcastChannel.method.type);
             }
 
-            const col = await db.collection({
-                name: 'heroes',
-                schema: {
-                    version: 0,
-                    type: 'object',
-                    properties: {
-                        id: {
-                            type: 'string',
-                            primary: true
-                        }
-                    },
-                    attachments: {
-                        encrypted: true
+            await db.addCollections({
+                heroes: {
+                    schema: {
+                        primaryKey: 'id',
+                        version: 0,
+                        type: 'object',
+                        properties: {
+                            id: {
+                                type: 'string',
+                                maxLength: 100
+                            }
+                        },
+                        attachments: {}
                     }
                 }
             });
-            const doc = await col.insert({
+            const doc = await db.heroes.insert({
                 id: 'foo'
             });
             assert.ok(doc);
 
-            const attachmentData = 'foo bar asldfkjalkdsfj';
+            const dataString = 'foo bar asldfkjalkdsfj';
+            const attachmentData = createBlob(dataString, 'text/plain');
             const attachment = await doc.putAttachment({
                 id: 'cat.jpg',
                 data: attachmentData,
@@ -58,9 +75,9 @@ module.exports = (function () {
 
             // issue #1371 Attachments not working in electron renderer with idb
             const readData = await attachment.getStringData();
-            assert.equal(readData, attachmentData);
+            assert.strictEqual(readData, dataString);
 
-            await db.destroy();
+            await db.close();
         }());
     };
     return runTests;

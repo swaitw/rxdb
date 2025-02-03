@@ -1,360 +1,310 @@
-/* eslint require-atomic-updates: 0 */
-
-import assert from 'assert';
-import AsyncTestUtil from 'async-test-util';
-import { clearNodeFolder } from 'broadcast-channel';
-import convertHrtime from 'convert-hrtime';
-import * as schemas from './helper/schemas';
-import * as schemaObjects from './helper/schema-objects';
-import { mergeMap } from 'rxjs/operators';
-
-// we do a custom build without dev-plugins,
-// like you would use in production
 import {
     createRxDatabase,
-    addRxPlugin,
-    randomCouchString,
-    dbCount,
-    RxDatabase
-} from '../plugins/core';
+    randomToken,
+    overwritable,
+    requestIdlePromise,
+    RxCollection
+} from '../plugins/core/index.mjs';
+import * as assert from 'assert';
 import {
-    addPouchPlugin, getRxStoragePouch
-} from '../plugins/pouchdb';
+    schemaObjects,
+    schemas,
+    isFastMode,
+    isDeno,
+    AverageSchemaDocumentType
+} from '../plugins/test-utils/index.mjs';
+import config from './unit/config.ts';
+import { wait } from 'async-test-util';
+declare const Deno: any;
 
-addPouchPlugin(require('pouchdb-adapter-memory'));
-import { RxDBNoValidatePlugin } from '../plugins/no-validate';
-addRxPlugin(RxDBNoValidatePlugin);
-import { RxDBKeyCompressionPlugin } from '../plugins/key-compression';
-addRxPlugin(RxDBKeyCompressionPlugin);
-import { RxDBMigrationPlugin } from '../plugins/migration';
-addRxPlugin(RxDBMigrationPlugin);
+/**
+ * Runs some performance tests.
+ * Mostly used to compare the performance of the different RxStorage implementations.
+ * Run via 'npm run test:performance:memory:node' and change 'memory' for other storage names.
+ */
+describe('performance.test.ts', () => {
+    it('init storage', async () => {
+        if (config.storage.init) {
+            await config.storage.init();
+        }
+    });
+    it('should not have enabled dev-mode which would affect the performance', () => {
+        assert.strictEqual(
+            overwritable.isDevMode(),
+            false
+        );
+    });
+    it('run the performance test', async function () {
+        this.timeout(500 * 1000);
+        const runs = isFastMode() ? 1 : 40;
+        const perfStorage = config.storage.getPerformanceStorage();
 
+        const totalTimes: { [k: string]: number[]; } = {};
 
-const elapsedTime = (before: any) => {
-    try {
-        return convertHrtime(process.hrtime(before)).milliseconds;
-    } catch (err) {
-        return performance.now() - before;
-    }
-};
-const nowTime = () => {
-    try {
-        return process.hrtime();
-    } catch (err) {
-        return performance.now();
-    }
-};
+        const collectionsAmount = 4;
+        const docsAmount = 3000;
+        const serialDocsAmount = 50;
+        const parallelQueryAmount = 4;
+        const insertBatches = 6;
 
-async function afterTest() {
-    await AsyncTestUtil.wait(waitTimeBetween / 2);
+        let runsDone = 0;
+        while (runsDone < runs) {
+            console.log('runsDone: ' + runsDone + ' of ' + runs);
+            runsDone++;
 
-    // ensure databases cleaned up
-    const count = dbCount();
-    assert.strictEqual(count, 0);
+            let time = performance.now();
+            const updateTime = (flag?: string) => {
+                if (!flag) {
+                    time = performance.now();
+                    return;
+                }
+                const diff = performance.now() - time;
+                if (!totalTimes[flag]) {
+                    totalTimes[flag] = [diff];
+                } else {
+                    totalTimes[flag].push(diff);
+                }
+                time = performance.now();
+            };
 
-    await global.gc();
-    await AsyncTestUtil.wait(waitTimeBetween / 2);
-}
+            await awaitBetweenTest();
+            updateTime();
 
-
-// each test can take about 10seconds
-const benchmark: any = {
-    spawnDatabases: {
-        amount: 1000,
-        collections: 5,
-        total: 0,
-        perInstance: 0
-    },
-    insertDocuments: {
-        blocks: 2000,
-        blockSize: 5,
-        total: 0,
-        perBlock: 0
-    },
-    findDocuments: {
-        amount: 10000,
-        total: 0,
-        perDocument: 0
-    },
-    migrateDocuments: {
-        amount: 1000,
-        total: 0
-    },
-    writeWhileSubscribe: {
-        amount: 1000,
-        total: 0
-    }
-};
-
-
-const ormMethods = {
-    foo() {
-        return 'bar';
-    },
-    foobar() {
-        return 'barbar';
-    },
-    foobar2() {
-        return 'barbar';
-    }
-};
-
-// increase this to measure minimal optimisations
-const runs = 1;
-const waitTimeBetween = 1000;
-
-for (let r = 0; r < runs; r++) {
-
-    describe('performance.test.js', function () {
-        this.timeout(90 * 1000);
-        it('clear broadcast-channel tmp-folder', async () => {
-            await clearNodeFolder();
-        });
-        it('ensure garbage collector can be used', async () => {
-            await global.gc();
-        });
-        it('wait a bit for jit', async () => {
-            await AsyncTestUtil.wait(2000);
-        });
-        it('spawnDatabases', async () => {
-            // create databases with some collections each
-            const dbs: RxDatabase[] = [];
-
-            const startTime = nowTime();
-            for (let i = 0; i < benchmark.spawnDatabases.amount; i++) {
+            // create database
+            const dbName = 'test-db-performance-' + randomToken(10);
+            const schema = schemas.averageSchema();
+            let collection: RxCollection<AverageSchemaDocumentType>;
+            async function createDbWithCollections() {
+                if (collection) {
+                    await collection.database.close();
+                }
                 const db = await createRxDatabase({
-                    name: randomCouchString(10),
+                    name: dbName,
                     eventReduce: true,
-                    storage: getRxStoragePouch('memory')
+                    /**
+                     * A RxStorage implementation
+                     * might need a full leader election cycle to be usable.
+                     * So we disable multiInstance here because it would make no sense
+                     * to measure the leader election time instead of the database
+                     * creation time.
+                    */
+                    multiInstance: false,
+                    storage: perfStorage.storage
                 });
-                dbs.push(db);
 
+                // create collections
                 const collectionData: any = {};
-                new Array(benchmark.spawnDatabases.collections)
+                const collectionNames: string[] = [];
+                new Array(collectionsAmount)
                     .fill(0)
-                    .forEach(() => {
-                        const name = 'human' + randomCouchString(10);
+                    .forEach((_v, idx) => {
+                        const name = dbName + '_col_' + idx;
+                        collectionNames.push(name);
                         collectionData[name] = {
-                            schema: schemas.averageSchema(),
-                            statics: ormMethods
+                            schema,
+                            statics: {}
                         };
                     });
-                await db.addCollections(collectionData);
+                const firstCollectionName: string = collectionNames[0];
+                const collections = await db.addCollections(collectionData);
+                /**
+                 * Many storages have a lazy initialization.
+                 * So it makes no sense to measure the time of database/collection creation.
+                 * Insert we do a single insert an measure the time to the first insert.
+                 */
+                await collections[collectionNames[1]].insert(schemaObjects.averageSchemaData());
+                return collections[firstCollectionName];
             }
-            const elapsed = elapsedTime(startTime);
-            benchmark.spawnDatabases.total = benchmark.spawnDatabases.total + elapsed;
-            benchmark.spawnDatabases.perInstance = elapsed / benchmark.spawnDatabases.amount;
+            collection = await createDbWithCollections();
+            updateTime('time-to-first-insert');
+            await awaitBetweenTest();
 
-            await Promise.all(dbs.map(db => db.destroy()));
-            await afterTest();
-        });
-        it('insertDocuments', async () => {
-            const db = await createRxDatabase({
-                name: randomCouchString(10),
-                eventReduce: true,
-                storage: getRxStoragePouch('memory')
-            });
-            const cols = await db.addCollections({
-                human: {
-                    schema: schemas.averageSchema(),
-                    methods: ormMethods
-                }
-            });
-            const col = cols.human;
-            let lastDoc;
-
-            const docsData = new Array(benchmark.insertDocuments.blocks * benchmark.insertDocuments.blockSize)
-                .fill(0)
-                .map(() => schemaObjects.averageSchema());
-
-            const startTime = nowTime();
-            for (let i = 0; i < benchmark.insertDocuments.blocks; i++) {
-                await Promise.all(
-                    new Array(benchmark.insertDocuments.blockSize)
-                        .fill(0)
-                        .map(async () => {
-                            const doc = await col.insert(docsData.pop());
-                            lastDoc = doc;
-                        })
-                );
+            // insert documents (in batches)
+            const docIds: string[] = [];
+            const docsPerBatch = docsAmount / insertBatches;
+            for (let i = 0; i < insertBatches; i++) {
+                const docsData = new Array(docsPerBatch)
+                    .fill(0)
+                    .map((_v, idx) => {
+                        const data = schemaObjects.averageSchemaData({
+                            var1: (idx % 2) + '',
+                            var2: idx % parallelQueryAmount
+                        });
+                        docIds.push(data.id);
+                        return data;
+                    });
+                updateTime();
+                await collection.bulkInsert(docsData);
+                updateTime('insert-documents-' + docsPerBatch);
+                await awaitBetweenTest();
             }
-            const elapsed = elapsedTime(startTime);
-            assert.ok(lastDoc);
-            benchmark.insertDocuments.total = benchmark.insertDocuments.total + elapsed;
-            benchmark.insertDocuments.perBlock = elapsed / benchmark.insertDocuments.blocks;
-
-            await db.destroy();
-            await afterTest();
-        });
-
-        it('findDocuments', async () => {
-            const dbName = randomCouchString(10);
-            const schema = schemas.averageSchema();
-            const db = await createRxDatabase({
-                name: dbName,
-                eventReduce: true,
-                storage: getRxStoragePouch('memory')
-            });
-            const cols = await db.addCollections({
-                human: {
-                    schema,
-                    methods: ormMethods
-                }
-            });
-            const col = cols.human;
-
-            await Promise.all(
-                new Array(benchmark.findDocuments.amount)
-                    .fill(0)
-                    .map(() => schemaObjects.averageSchema())
-                    .map(data => col.insert(data))
-            );
-            await db.destroy();
-
-            const db2 = await createRxDatabase({
-                name: dbName,
-                storage: getRxStoragePouch('memory'),
-                eventReduce: true,
-                ignoreDuplicate: true
-            });
-            const cols2 = await db2.addCollections({
-                human: {
-                    schema,
-                    methods: ormMethods
-                }
-            });
-            const col2 = cols2.human;
 
 
-            const startTime = nowTime();
-            const allDocs = await col2.find().exec();
-            const elapsed = elapsedTime(startTime);
+            // refresh db to ensure we do not run on caches
+            collection = await createDbWithCollections();
+            await awaitBetweenTest();
 
-            assert.strictEqual(allDocs.length, benchmark.findDocuments.amount);
-            benchmark.findDocuments.total = benchmark.findDocuments.total + elapsed;
-            benchmark.findDocuments.perDocument = elapsed / benchmark.findDocuments.amount;
+            /**
+             * Bulk Find by id
+             */
+            updateTime();
+            const idsResult = await collection.findByIds(docIds).exec();
+            updateTime('find-by-ids-' + docsAmount);
+            assert.strictEqual(Array.from(idsResult.keys()).length, docsAmount, 'find-by-id amount');
+            await awaitBetweenTest();
 
-            await db2.destroy();
-            await afterTest();
-        });
+            /**
+             * Serial inserts
+             */
+            updateTime();
+            let c = 0;
+            const serialIds: string[] = [];
+            while (c < serialDocsAmount) {
+                c++;
+                const data = schemaObjects.averageSchemaData({
+                    var2: 1000
+                });
+                serialIds.push(data.id);
+                await collection.insert(data);
+            }
+            updateTime('serial-inserts-' + serialDocsAmount);
 
-        it('migrateDocuments', async () => {
-            const name = randomCouchString(10);
-            const db = await createRxDatabase({
-                name,
-                eventReduce: true,
-                storage: getRxStoragePouch('memory')
-            });
-            const cols = await db.addCollections({
-                human: {
-                    schema: schemas.averageSchema()
-                }
-            });
-            const col = cols.human;
+            // refresh db to ensure we do not run on caches
+            collection = await createDbWithCollections();
+            await awaitBetweenTest();
 
-            // insert into old collection
-            await Promise.all(
-                new Array(benchmark.migrateDocuments.amount)
-                    .fill(0)
-                    .map(() => schemaObjects.averageSchema())
-                    .map(docData => col.insert(docData))
-            );
+            /**
+             * Serial find-by-id
+             */
+            updateTime();
+            for (const id of serialIds) {
+                await collection.findByIds([id]).exec();
+            }
+            updateTime('serial-find-by-id-' + serialDocsAmount);
+            await awaitBetweenTest();
 
-            const db2 = await createRxDatabase({
-                name,
-                eventReduce: true,
-                storage: getRxStoragePouch('memory'),
-                ignoreDuplicate: true
-            });
-            const newSchema = schemas.averageSchema();
-            newSchema.version = 1;
-            newSchema.properties.var2.type = 'string';
-            const cols2 = await db2.addCollections({
-                human: {
-                    schema: newSchema,
-                    migrationStrategies: {
-                        1: (oldDoc: any) => {
-                            oldDoc.var2 = oldDoc.var2 + '';
-                            return oldDoc;
-                        }
-                    },
-                    autoMigrate: false
-                }
-            });
-            const col2 = cols2.human;
-
-            const startTime = nowTime();
-
-            await col2.migratePromise();
-            const elapsed = elapsedTime(startTime);
-            benchmark.migrateDocuments.total = benchmark.migrateDocuments.total + elapsed;
-
-            await db.destroy();
-            await db2.destroy();
-            await afterTest();
-        });
-        it('writeWhileSubscribe', async () => {
-            const name = randomCouchString(10);
-            const db = await createRxDatabase({
-                name,
-                eventReduce: true,
-                storage: getRxStoragePouch('memory')
-            });
-            const cols = await db.addCollections({
-                human: {
-                    schema: schemas.averageSchema()
-                }
-            });
-            const col = cols.human;
-
-            const query = col.find({
-                selector: {
-                    var2: {
-                        $gt: 1
-                    }
-                },
+            // find by query
+            updateTime();
+            const query = collection.find({
+                selector: {},
                 sort: [
+                    { var2: 'asc' },
                     { var1: 'asc' }
                 ]
             });
+            const queryResult = await query.exec();
+            updateTime('find-by-query');
+            assert.strictEqual(queryResult.length, docsAmount + serialDocsAmount, 'find-by-query');
 
-            let t = 0;
-            let lastResult: any[] = [];
-            const startTime = nowTime();
 
-            await new Promise(res => {
-                const obs$ = query.$.pipe(
-                    mergeMap(async (result) => {
-                        if (t <= benchmark.writeWhileSubscribe.amount) {
-                            t++;
-                            await col.insert(schemaObjects.averageSchema());
-                        } else {
-                            // TODO why does this test fail when we directly unsubscribe?
-                            // sub.unsubscribe();
-                            res(null);
+            // refresh db to ensure we do not run on caches
+            collection = await createDbWithCollections();
+            await awaitBetweenTest();
+
+            // find by multiple queries in parallel
+            updateTime();
+            const parallelResult = await Promise.all(
+                new Array(parallelQueryAmount).fill(0).map((_v, idx) => {
+                    const subQuery = collection.find({
+                        selector: {
+                            var2: idx
                         }
-                        return result;
-                    })
-                );
-                const sub = obs$.subscribe(result => {
-                    lastResult = result;
+                    });
+                    return subQuery.exec();
+                })
+            );
+            updateTime('find-by-query-parallel-' + parallelQueryAmount);
+            let parallelSum = 0;
+            parallelResult.forEach(r => parallelSum = parallelSum + r.length);
+            assert.strictEqual(parallelSum, docsAmount, 'parallelSum');
+            await awaitBetweenTest();
+
+            // run count query
+            updateTime();
+            let t = 0;
+            while (t < parallelQueryAmount) {
+                const countQuery = collection.count({
+                    selector: {
+                        var2: {
+                            $eq: t
+                        }
+                    }
                 });
-            });
+                const countQueryResult = await countQuery.exec();
+                assert.ok(countQueryResult >= ((docsAmount / insertBatches) - 5), 'count A ' + countQueryResult);
+                assert.ok(countQueryResult < (docsAmount * 0.8), 'count B ' + countQueryResult);
+                t++;
+            }
+            updateTime('4x-count');
+            await awaitBetweenTest();
 
-            const elapsed = elapsedTime(startTime);
+            // test property access time
+            updateTime();
+            let sum = 0;
+            for (let i = 0; i < queryResult.length; i++) {
+                const doc = queryResult[i];
 
-            await AsyncTestUtil.wait(500);
+                // access the same property exactly 2 times
+                sum += doc.deep.deeper.deepNr;
+                sum += doc.deep.deeper.deepNr;
+            }
+            updateTime('property-access');
+            assert.ok(sum > 10);
 
-            benchmark.writeWhileSubscribe.total = benchmark.writeWhileSubscribe.total + elapsed;
-            assert.strictEqual(lastResult.length, benchmark.writeWhileSubscribe.amount);
-            await db.destroy();
 
-            await afterTest();
+            await collection.database.remove();
+        }
+
+
+        const timeToLog: any = {
+            description: perfStorage.description,
+            platform: config.storage.name,
+            collectionsAmount,
+            docsAmount
+        };
+        Object.entries(totalTimes).forEach(([key, times]) => {
+            timeToLog[key] = roundToThree(averageOfTimeValues(times, 95));
         });
 
-        it('show results:', async () => {
-            await afterTest();
-            console.log(JSON.stringify(benchmark, null, 2));
-        });
+        console.log('Performance test for ' + perfStorage.description);
+        console.log(JSON.stringify(timeToLog, null, 4));
+        // process.exit();
     });
+    /**
+     * Some runtimes do not automatically exit for whatever reason.
+     */
+    it('exit the process', () => {
+        if (isDeno) {
+            Deno.exit(0);
+        }
+    });
+});
+
+
+export function averageOfTimeValues(
+    times: number[],
+    /**
+     * To better account for anomalies
+     * during time measurements,
+     * we strip the highest x percent.
+     */
+    striphighestXPercent: number
+): number {
+    times = times.sort((a, b) => a - b);
+    const stripAmount = Math.floor(times.length * (striphighestXPercent * 0.01));
+    const useNumbers = times.slice(0, times.length - stripAmount);
+    let total = 0;
+    useNumbers.forEach(nr => total = total + nr);
+    return total / useNumbers.length;
+}
+
+function roundToThree(num: number) {
+    return Math.round(num * 1000) / 1000;
+}
+
+async function awaitBetweenTest() {
+    await requestIdlePromise();
+    await wait(100);
+    await requestIdlePromise();
+    await requestIdlePromise();
 }

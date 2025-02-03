@@ -3,45 +3,39 @@
  * they can be grabbed by the observables of database, collection and document
  */
 
-import {
+import type {
     ChangeEvent as EventReduceChangeEvent,
 } from 'event-reduce-js';
-import { overwritable } from './overwritable';
+import { overwritable } from './overwritable.ts';
 
 import type {
-    RxChangeEvent
-} from './types';
-
-export type RxChangeEventBroadcastChannelData = {
-    cE: RxChangeEvent<any>,
-    storageToken: string
-};
+    EventBulk,
+    RxChangeEvent,
+    RxChangeEventBulk,
+    RxDocumentData,
+    RxStorageChangeEvent
+} from './types/index.d.ts';
+import { appendToArray, getFromMapOrCreate } from './plugins/utils/index.ts';
 
 export function getDocumentDataOfRxChangeEvent<T>(
-    rxChangeEvent: RxChangeEvent<T>
-): T {
+    rxChangeEvent: RxStorageChangeEvent<T>
+): RxDocumentData<T> {
     if ((rxChangeEvent as any).documentData) {
         return (rxChangeEvent as any).documentData;
     } else {
         return (rxChangeEvent as any).previousDocumentData;
     }
-
 }
 
-export function isRxChangeEventIntern(
-    rxChangeEvent: RxChangeEvent<any>
-): boolean {
-    if (rxChangeEvent.collectionName && rxChangeEvent.collectionName.charAt(0) === '_') {
-        return true;
-    } else {
-        return false;
-    }
-}
-
-
+/**
+ * Might return null which means an
+ * already deleted document got modified but still is deleted.
+ * These kind of events are not relevant for the event-reduce algorithm
+ * and must be filtered out.
+ */
 export function rxChangeEventToEventReduceChangeEvent<DocType>(
-    rxChangeEvent: RxChangeEvent<DocType>
-): EventReduceChangeEvent<DocType> {
+    rxChangeEvent: RxStorageChangeEvent<DocType>
+): EventReduceChangeEvent<DocType> | null {
     switch (rxChangeEvent.operation) {
         case 'INSERT':
             return {
@@ -65,4 +59,79 @@ export function rxChangeEventToEventReduceChangeEvent<DocType>(
                 previous: rxChangeEvent.previousDocumentData as DocType
             };
     }
+}
+
+/**
+ * Flattens the given events into a single array of events.
+ * Used mostly in tests.
+ */
+export function flattenEvents<EventType>(
+    input: EventBulk<EventType, any> | EventBulk<EventType, any>[] | EventType | EventType[]
+): EventType[] {
+    const output: EventType[] = [];
+    if (Array.isArray(input)) {
+        input.forEach(inputItem => {
+            const add = flattenEvents(inputItem);
+            appendToArray(output, add);
+        });
+    } else {
+        if ((input as any).id && (input as any).events) {
+            // is bulk
+            (input as EventBulk<EventType, any>)
+                .events
+                .forEach(ev => output.push(ev));
+        } else {
+            output.push(input as any);
+        }
+    }
+
+    const usedIds = new Set<string>();
+    const nonDuplicate: EventType[] = [];
+
+    function getEventId(ev: any): string {
+        return [
+            ev.documentId,
+            ev.documentData ? ev.documentData._rev : '',
+            ev.previousDocumentData ? ev.previousDocumentData._rev : ''
+        ].join('|');
+    }
+
+    output.forEach(ev => {
+        const eventId = getEventId(ev);
+        if (!usedIds.has(eventId)) {
+            usedIds.add(eventId);
+            nonDuplicate.push(ev);
+        }
+    });
+
+    return nonDuplicate;
+}
+
+const EVENT_BULK_CACHE = new Map<RxChangeEventBulk<any>, RxChangeEvent<any>[]>();
+export function rxChangeEventBulkToRxChangeEvents(
+    eventBulk: RxChangeEventBulk<any>
+) {
+    return getFromMapOrCreate(
+        EVENT_BULK_CACHE,
+        eventBulk,
+        () => {
+            const events: RxChangeEvent<any>[] = new Array(eventBulk.events.length);
+            const rawEvents = eventBulk.events;
+            const collectionName = eventBulk.collectionName;
+            const isLocal = eventBulk.isLocal;
+            const deepFreezeWhenDevMode = overwritable.deepFreezeWhenDevMode;
+            for (let index = 0; index < rawEvents.length; index++) {
+                const event = rawEvents[index];
+                events[index] = {
+                    documentId: event.documentId,
+                    collectionName,
+                    isLocal,
+                    operation: event.operation,
+                    documentData: deepFreezeWhenDevMode(event.documentData) as any,
+                    previousDocumentData: deepFreezeWhenDevMode(event.previousDocumentData) as any
+                };
+            }
+            return events;
+        }
+    );
 }

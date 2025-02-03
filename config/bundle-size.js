@@ -1,18 +1,14 @@
 import {
     createRxDatabase
-} from '../plugins/core';
+} from '../plugins/core/index.mjs';
 import {
-    getRxStoragePouch,
-    addPouchPlugin
-} from '../plugins/pouchdb';
+    getRxStorageMemory,
+} from '../plugins/storage-memory/index.mjs';
 
 function run() {
-    addPouchPlugin(require('pouchdb-adapter-idb'));
     createRxDatabase({
-        // the name of the database
         name: 'heroesdb',
-        // use pouchdb with the indexeddb-adapter as storage engine.
-        storage: getRxStoragePouch('idb')
+        storage: getRxStorageMemory()
     }).then(db => {
         return db.destroy();
     });

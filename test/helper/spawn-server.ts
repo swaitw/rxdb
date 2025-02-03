@@ -1,49 +1,44 @@
-/**
- * creates a new express-server to use as sync-target
- * @link https://github.com/pouchdb/express-pouchdb
- */
-
 import { randomString } from 'async-test-util';
+import { PROMISE_RESOLVE_VOID } from '../../plugins/core/index.mjs';
+import { getFetchWithCouchDBAuthorization } from '../../plugins/replication-couchdb/index.mjs';
+import {
+    ENV_VARIABLES
+} from '../../plugins/test-utils/index.mjs';
 
-const express = require('express');
-const app = express();
-const PouchDB = require('pouchdb');
-const InMemPouchDB = PouchDB.defaults({
-    prefix: '/test_tmp/server-temp-pouch/',
-    db: require('memdown'),
-    configPath: 'test_tmp/'
-});
-const expressPouch = require('express-pouchdb')(InMemPouchDB);
-
-let lastPort = 12121;
-
-export async function spawn(): Promise<{
-    url: string,
-    close: () => Promise<void>
+/**
+ * Spawns a CouchDB server
+ */
+export async function spawn(
+    databaseName = randomString(5),
+    port?: number
+): Promise<{
+    dbName: string;
+    url: string;
+    close: () => Promise<void>;
 }> {
-    lastPort++;
-    const path = '/db';
-    app.use(path, expressPouch);
-    const ret = 'http://localhost:' + lastPort + path;
+    if (!ENV_VARIABLES.NATIVE_COUCHDB) {
+        throw new Error('ENV_VARIABLES.NATIVE_COUCHDB not set. A CouchDB server must be started');
+    }
 
-    return new Promise(res => {
-        const server = app.listen(lastPort, function () {
-            res({
-                url: ret + '/' + randomString(5) + '/',
-                close(now = false) {
-                    if (now) {
-                        server.close();
-                        return Promise.resolve();
-                    } else {
-                        return new Promise(res2 => {
-                            setTimeout(() => {
-                                server.close();
-                                res2();
-                            }, 1000);
-                        });
-                    }
-                }
-            });
-        });
-    });
+    if (port) {
+        throw new Error('if NATIVE_COUCHDB is set, do not specify a port');
+    }
+    port = parseInt(ENV_VARIABLES.NATIVE_COUCHDB, 10);
+    const url = 'http://0.0.0.0:' + port + '/' + databaseName + '/';
+
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 1000);
+    const authFetch = getFetchWithCouchDBAuthorization('root', 'root');
+    await authFetch(
+        url,
+        {
+            method: 'PUT',
+            signal: controller.signal
+        }
+    );
+    return {
+        dbName: databaseName,
+        url,
+        close: () => PROMISE_RESOLVE_VOID
+    };
 }

@@ -1,6 +1,6 @@
-import type { RxJsonSchema, NumberFunctionMap } from '../../types';
-import { newRxTypeError, newRxError } from '../../rx-error';
-import { getPreviousVersions } from '../../rx-schema';
+import type { RxJsonSchema, NumberFunctionMap } from '../../types/index.d.ts';
+import { newRxTypeError, newRxError } from '../../rx-error.ts';
+import { getPreviousVersions } from '../../rx-schema.ts';
 
 
 /**
@@ -40,11 +40,11 @@ export function checkMigrationStrategies(
             v: vNr,
             s: migrationStrategies[(vNr + 1)]
         }))
-        .filter(strat => typeof strat.s !== 'function')
-        .forEach(strat => {
+        .filter(strategy => typeof strategy.s !== 'function')
+        .forEach(strategy => {
             throw newRxTypeError('COL13', {
-                version: strat.v,
-                type: typeof strat,
+                version: strategy.v,
+                type: typeof strategy,
                 schema
             });
         });

@@ -1,82 +1,260 @@
 /// <reference path="../../node_modules/@types/mocha/index.d.ts" />
-const {
-    detect
-} = require('detect-browser');
-import BroadcastChannel from 'broadcast-channel';
-import * as path from 'path';
+
+import {
+    getRxStorageDexie
+} from '../../plugins/storage-dexie/index.mjs';
+import { getRxStorageRemoteWebsocket } from '../../plugins/storage-remote-websocket/index.mjs';
+import { getRxStorageMemory } from '../../plugins/storage-memory/index.mjs';
+import { getRxStorageDenoKV } from '../../plugins/storage-denokv/index.mjs';
+import { CUSTOM_STORAGE } from './custom-storage.ts';
+import { wrappedValidateAjvStorage } from '../../plugins/validate-ajv/index.mjs';
+import { randomNumber } from 'async-test-util';
+import * as path from 'node:path';
+import url from 'node:url';
+import {
+    RxTestStorage,
+    randomDelayStorage
+} from '../../plugins/core/index.mjs';
+
+import {
+    indexedDB as fakeIndexedDB,
+    IDBKeyRange as fakeIDBKeyRange
+} from 'fake-indexeddb';
 import parallel from 'mocha.parallel';
-import { RxStorage } from '../../src/types';
-import { getRxStoragePouch, addPouchPlugin } from '../../plugins/pouchdb';
-import { getRxStorageLoki } from '../../plugins/lokijs';
 
-function isFastMode(): boolean {
-    try {
-        return process.env.NODE_ENV === 'fast';
-    } catch (err) {
-        return false;
-    }
-}
-
-let useParallel = describe;
-try {
-    if (process.env.NODE_ENV === 'fast') {
-        useParallel = parallel;
-        BroadcastChannel.enforceOptions({
-            type: 'simulate'
-        });
-    }
-} catch (err) { }
-
-declare type Storage = {
-    readonly name: string;
-    readonly getStorage: () => RxStorage<any, any>;
-    readonly hasCouchDBReplication: boolean;
-    readonly hasAttachments: boolean;
-}
-const config: {
-    platform: any;
-    parallel: typeof useParallel;
-    rootPath: string;
-    isFastMode: () => boolean;
-    storage: Storage;
-} = {
-    platform: detect(),
-    parallel: useParallel,
-    rootPath: '',
+import { createRequire } from 'node:module';
+import {
+    DEFAULT_STORAGE,
+    ENV_VARIABLES,
+    getConfig,
+    isDeno,
     isFastMode,
-    storage: {} as any
-};
+    isNode,
+    setConfig
+} from '../../plugins/test-utils/index.mjs';
 
-let DEFAULT_STORAGE: string;
-if (detect().name === 'node') {
-    DEFAULT_STORAGE = process.env.DEFAULT_STORAGE as any;
-} else {
-    /**
-     * Enforce pouchdb in browser tests.
-     * TODO also run lokijs storage there.
-     */
-    DEFAULT_STORAGE = 'pouchdb';
+function nodeRequire(filePath: string) {
+    const require = createRequire(import.meta.url);
+    return require(filePath);
 }
 
-export function setDefaultStorage(storageKey: string) {
+export function getRootPath() {
+    const __filename = url.fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+
+    const rootPath = path.join(__dirname, '../../');
+    return rootPath;
+}
+
+
+export const describeParallel: typeof describe = ENV_VARIABLES.NODE_ENV === 'fast' ? parallel : describe;
+
+
+export function getStorage(storageKey: string): RxTestStorage {
+    if (storageKey === CUSTOM_STORAGE.name || storageKey === 'custom') {
+        return CUSTOM_STORAGE;
+    }
+
     switch (storageKey) {
-        case 'pouchdb':
-            config.storage = {
-                name: 'pouchdb',
-                getStorage: () => {
-                    addPouchPlugin(require('pouchdb-adapter-memory'));
-                    return getRxStoragePouch('memory');
+        case 'memory':
+            return {
+                name: storageKey,
+                getStorage: () => wrappedValidateAjvStorage({ storage: getRxStorageMemory() }),
+                getPerformanceStorage() {
+                    return {
+                        description: 'memory',
+                        storage: getRxStorageMemory()
+                    };
                 },
-                hasCouchDBReplication: true,
-                hasAttachments: true
+                hasPersistence: true,
+                hasMultiInstance: true,
+                hasAttachments: true,
+                hasReplication: true
             };
             break;
-        case 'lokijs':
-            config.storage = {
-                name: 'lokijs',
-                getStorage: () => getRxStorageLoki(),
-                hasCouchDBReplication: false,
-                hasAttachments: false
+        /**
+         * We run the tests once with random delays
+         * on reads and writes. Used to easier detect flaky tests.
+         */
+        case 'memory-random-delay':
+
+            const delayFn = () => randomNumber(10, 50);
+            // const delayFn = () => 150;
+
+            return {
+                name: storageKey,
+                getStorage: () => wrappedValidateAjvStorage({
+                    storage: randomDelayStorage({
+                        storage: getRxStorageMemory({
+                        }),
+                        delayTimeBefore: delayFn,
+                        delayTimeAfter: delayFn
+                    })
+                }),
+                getPerformanceStorage() {
+                    return {
+                        description: 'memory-random-delay',
+                        storage: randomDelayStorage({
+                            storage: getRxStorageMemory({
+                            }),
+                            delayTimeBefore: delayFn,
+                            delayTimeAfter: delayFn
+                        })
+                    };
+                },
+                hasPersistence: true,
+                hasMultiInstance: true,
+                hasAttachments: false,
+                hasReplication: true
+            };
+            break;
+        case 'dexie':
+            return {
+                name: storageKey,
+                getStorage: () => {
+                    if (
+                        isNode ||
+                        isDeno ||
+                        isFastMode()
+                    ) {
+                        return wrappedValidateAjvStorage({
+                            storage: getRxStorageDexie({
+                                indexedDB: fakeIndexedDB,
+                                IDBKeyRange: fakeIDBKeyRange
+                            })
+                        });
+                    } else {
+                        return wrappedValidateAjvStorage({ storage: getRxStorageDexie({}) });
+                    }
+                },
+                getPerformanceStorage() {
+                    if (isNode) {
+                        return {
+                            storage: getRxStorageDexie({
+                                indexedDB,
+                                IDBKeyRange
+                            }),
+                            description: 'dexie+fake-indexeddb'
+                        };
+                    } else {
+                        return {
+                            storage: getRxStorageDexie({}),
+                            description: 'dexie+native-indexeddb'
+                        };
+                    }
+                },
+                hasPersistence: true,
+                hasMultiInstance: true,
+                hasAttachments: true,
+                hasReplication: true
+            };
+            break;
+        case 'foundationdb':
+            const foundationDBAPIVersion = 630;
+
+
+            let getStorageFnFoundation: any;
+            return {
+                async init() {
+                    // use a dynamic import so it does not break browser bundling
+                    const { getRxStorageFoundationDB } = await nodeRequire('../../plugins/storage-foundationdb/index.cjs');
+                    getStorageFnFoundation = getRxStorageFoundationDB;
+                },
+                name: storageKey,
+                getStorage: () => {
+                    return wrappedValidateAjvStorage({
+                        storage: getStorageFnFoundation({
+                            apiVersion: foundationDBAPIVersion
+                        })
+                    });
+                },
+                getPerformanceStorage() {
+                    return {
+                        description: 'foundationdb-native',
+                        storage: getStorageFnFoundation({
+                            apiVersion: foundationDBAPIVersion
+                        })
+                    };
+                },
+                hasPersistence: true,
+                hasMultiInstance: false,
+                hasAttachments: true,
+                hasReplication: true
+            };
+            break;
+        case 'mongodb':
+
+            // use a dynamic import so it does not break browser bundling
+
+            const mongoConnectionString = 'mongodb://localhost:27017';
+            let getStorageFnMongo: any;
+            return {
+                async init() {
+                    const { getRxStorageMongoDB } = await nodeRequire('../../plugins/storage-mongodb/index.cjs');
+                    getStorageFnMongo = getRxStorageMongoDB;
+                },
+                name: storageKey,
+                getStorage: () => {
+                    return wrappedValidateAjvStorage({
+                        storage: getStorageFnMongo({
+                            connection: mongoConnectionString
+                        })
+                    });
+                },
+                getPerformanceStorage() {
+                    return {
+                        description: 'mongodb-native',
+                        storage: getStorageFnMongo({
+                            connection: mongoConnectionString
+                        })
+                    };
+                },
+                hasPersistence: true,
+                hasMultiInstance: false,
+                hasAttachments: false,
+                hasReplication: true
+            };
+            break;
+        case 'remote':
+            return {
+                name: storageKey,
+                getStorage: () => {
+                    return wrappedValidateAjvStorage({
+                        storage: getRxStorageRemoteWebsocket({
+                            url: 'ws://localhost:18007',
+                            mode: 'storage'
+                        })
+                    });
+                },
+                getPerformanceStorage() {
+                    return {
+                        storage: getRxStorageRemoteWebsocket({
+                            url: 'ws://localhost:18007',
+                            mode: 'storage'
+                        }),
+                        description: 'remote+dexie+fake-indexeddb'
+                    };
+                },
+                hasPersistence: true,
+                hasMultiInstance: true,
+                hasAttachments: true,
+                hasReplication: true
+            };
+            break;
+        case 'denokv':
+            return {
+                name: storageKey,
+                getStorage: () => wrappedValidateAjvStorage({ storage: getRxStorageDenoKV() as any }),
+                getPerformanceStorage() {
+                    return {
+                        description: 'denokv',
+                        storage: getRxStorageDenoKV()
+                    };
+                },
+                hasPersistence: true,
+                hasMultiInstance: true,
+                hasAttachments: false,
+                hasReplication: true
             };
             break;
         default:
@@ -84,24 +262,12 @@ export function setDefaultStorage(storageKey: string) {
     }
 }
 
-console.log('DEFAULT_STORAGE: ' + DEFAULT_STORAGE);
-setDefaultStorage(DEFAULT_STORAGE);
 
-if (config.platform.name === 'node') {
-    process.setMaxListeners(100);
-    require('events').EventEmitter.defaultMaxListeners = 100;
-    config.rootPath = path.join(__dirname, '../../');
-    console.log('rootPath: ' + config.rootPath);
-
-
-    /**
-     * Add a global function to process, so we can debug timings
-     */
-    (process as any).startTime = performance.now();
-    (process as any).logTime = (msg: string = '') => {
-        const diff = performance.now() - (process as any).startTime;
-        console.log('process logTime(' + msg + ') ' + diff + 'ms');
-    };
-}
-
+const config = (() => {
+    setConfig({
+        storage: getStorage(DEFAULT_STORAGE) as any
+    });
+    console.log('# use RxStorage: ' + getConfig().storage.name);
+    return getConfig();
+})();
 export default config;

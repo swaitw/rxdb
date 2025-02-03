@@ -11,17 +11,17 @@ jobs:
   # This workflow contains a single job called "build"
   build-all:
     # The type of runner that the job will run on
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v2.4.1
+        uses: actions/setup-node@v4.2.0
         with:
-          node-version: 16.5.0
+          node-version-file: '.nvmrc'
 
       - name: install npm dependencies
         run: npm install
@@ -29,22 +29,9 @@ jobs:
       - name: build code
         run: npm run build
       
-      # TODO move from gitbook to honkit
-      # https://github.com/honkit/honkit
-      # so we do not need this
-      - name: downgrade nodejs for gitbook
-        uses: actions/setup-node@v2.4.1
-        with:
-          node-version: 13.8.0
-
-      - name: reinstall with older node version
-        run: |
-          node -v
-          rm -r node_modules/
-          npm install
-
       - name: build docs
         run: |
+          (cd docs-src && npm install)
           npm run docs:build
 
       - name: Commit files

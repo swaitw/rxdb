@@ -1,180 +1,195 @@
 import type {
-    BulkWriteRow,
+    HashFunction,
+    InternalStoreDocType,
     RxCollection,
     RxDatabase,
     RxDocumentData,
-    RxStorageBulkWriteError,
+    RxJsonSchema,
+    RxStorage,
     RxStorageInstance,
-    RxStorageInstanceCreationParams,
-    RxStorageKeyObjectInstance
-} from './types';
+    RxStorageInstanceCreationParams
+} from './types/index.d.ts';
 import {
-    flatClone
-} from './util';
+    createRevision,
+    flatClone,
+    getDefaultRevision,
+    getDefaultRxDocumentMeta,
+    now
+} from './plugins/utils/index.ts';
 import {
-    newRxError
-} from './rx-error';
-import { runPluginHooks } from './hooks';
-import { getSingleDocument, writeSingle } from './rx-storage-helper';
-import { RxCollectionBase } from './rx-collection';
-import { overwritable } from './overwritable';
-
-
-/**
- * Every write access on the storage engine,
- * goes throught this method
- * so we can run hooks and resolve stuff etc.
- */
-export async function writeToStorageInstance<RxDocumentType>(
-    collection: RxCollection<RxDocumentType, any> | RxCollectionBase<any, RxDocumentType, any>,
-    writeRow: BulkWriteRow<RxDocumentType>,
-    overwrite: boolean = false
-): Promise<
-    RxDocumentData<RxDocumentType>
-> {
-    const toStorageInstance: BulkWriteRow<any> = {
-        previous: writeRow.previous ? _handleToStorageInstance(collection, flatClone(writeRow.previous)) : undefined,
-        document: _handleToStorageInstance(collection, flatClone(writeRow.document))
-    };
-
-    while (true) {
-        try {
-            const writeResult = await collection.database.lockedRun(
-                () => writeSingle(
-                    collection.storageInstance,
-                    toStorageInstance
-                )
-            );
-            // on success, just return the result
-
-            const ret = _handleFromStorageInstance(collection, writeResult);
-            return ret;
-        } catch (err: any) {
-            const useErr: RxStorageBulkWriteError<RxDocumentType> = err as any;
-            const primary = useErr.documentId;
-            if (overwrite && useErr.status === 409) {
-                // we have a conflict but must overwrite
-                // so get the new revision
-                const singleRes = await collection.database.lockedRun(
-                    () => getSingleDocument(collection.storageInstance, primary)
-                );
-                if (!singleRes) {
-                    throw newRxError('SNH', { args: { writeRow } });
-                }
-                toStorageInstance.previous = singleRes;
-                // now we can retry
-            } else if (useErr.status === 409) {
-                throw newRxError('COL19', {
-                    collection: collection.name,
-                    id: primary,
-                    pouchDbError: useErr,
-                    data: writeRow
-                });
-            } else {
-                throw useErr;
-            }
-        }
-    }
-}
-
-/**
- * wrappers to process document data beofre/after it goes to the storage instnace.
- * Used to handle keycompression, encryption etc
- */
-export function _handleToStorageInstance(
-    col: RxCollection | RxCollectionBase<any, any, any>,
-    data: any
-) {
-    // ensure primary key has not been changed
-    if (overwritable.isDevMode()) {
-        col.schema.fillPrimaryKey(data);
-    }
-
-    data = (col._crypter as any).encrypt(data);
-
-    const hookParams = {
-        collection: col,
-        doc: data
-    };
-    runPluginHooks('preWriteToStorageInstance', hookParams);
-
-    return hookParams.doc;
-}
-
-export function _handleFromStorageInstance(
-    col: RxCollection | RxCollectionBase<any, any, any>,
-    data: any,
-    noDecrypt = false
-) {
-
-    const hookParams = {
-        collection: col,
-        doc: data
-    };
-    runPluginHooks('postReadFromInstance', hookParams);
-
-    if (noDecrypt) {
-        return hookParams.doc;
-    }
-
-    return (col._crypter as any).decrypt(hookParams.doc);
-}
+    fillObjectWithDefaults,
+    fillPrimaryKey
+} from './rx-schema-helper.ts';
+import type { RxSchema } from './rx-schema.ts';
+import { runAsyncPluginHooks } from './hooks.ts';
+import { getAllCollectionDocuments } from './rx-database-internal-store.ts';
+import { flatCloneDocWithMeta } from './rx-storage-helper.ts';
+import { overwritable } from './overwritable.ts';
+import type { RxCollectionBase } from './rx-collection.ts';
+import { newRxError } from './rx-error.ts';
 
 /**
  * fills in the default data.
  * This also clones the data.
  */
-export function fillObjectDataBeforeInsert(
-    collection: RxCollection | RxCollectionBase<any>,
-    data: any
-): any {
-    let useJson = collection.schema.fillObjectWithDefaults(data);
-    useJson = collection.schema.fillPrimaryKey(useJson);
-
-    return useJson;
-}
-
-
-export function getCollectionLocalInstanceName(collectionName: string): string {
-    return collectionName + '-local';
+export function fillObjectDataBeforeInsert<RxDocType>(
+    schema: RxSchema<RxDocType>,
+    data: Partial<RxDocumentData<RxDocType>> | any
+): RxDocumentData<RxDocType> {
+    data = flatClone(data);
+    data = fillObjectWithDefaults(schema, data);
+    if (typeof schema.jsonSchema.primaryKey !== 'string') {
+        data = fillPrimaryKey(
+            schema.primaryPath,
+            schema.jsonSchema,
+            data
+        );
+    }
+    data._meta = getDefaultRxDocumentMeta();
+    if (!Object.prototype.hasOwnProperty.call(data, '_deleted')) {
+        data._deleted = false;
+    }
+    if (!Object.prototype.hasOwnProperty.call(data, '_attachments')) {
+        data._attachments = {};
+    }
+    if (!Object.prototype.hasOwnProperty.call(data, '_rev')) {
+        data._rev = getDefaultRevision();
+    }
+    return data;
 }
 
 /**
  * Creates the storage instances that are used internally in the collection
  */
-export async function createRxCollectionStorageInstances<RxDocumentType, Internals, InstanceCreationOptions>(
-    collectionName: string,
-    rxDatabase: RxDatabase,
-    storageInstanceCreationParams: RxStorageInstanceCreationParams<RxDocumentType, InstanceCreationOptions>,
-    instanceCreationOptions: InstanceCreationOptions
-): Promise<{
-    storageInstance: RxStorageInstance<RxDocumentType, Internals, InstanceCreationOptions>,
-    localDocumentsStore: RxStorageKeyObjectInstance<any, InstanceCreationOptions>
-}> {
-    storageInstanceCreationParams.broadcastChannel = rxDatabase.broadcastChannel;
-    const [
-        storageInstance,
-        localDocumentsStore
-    ] = await Promise.all([
-        rxDatabase.storage.createStorageInstance<RxDocumentType>(
-            storageInstanceCreationParams
-        ),
-        rxDatabase.storage.createKeyObjectStorageInstance({
-            databaseName: rxDatabase.name,
-            /**
-             * Use a different collection name for the local documents instance
-             * so that the local docs can be kept while deleting the normal instance
-             * after migration.
-             */
-            collectionName: getCollectionLocalInstanceName(collectionName),
-            options: instanceCreationOptions,
-            idleQueue: rxDatabase.idleQueue,
-            broadcastChannel: rxDatabase.broadcastChannel
-        })
-    ]);
+export async function createRxCollectionStorageInstance<RxDocumentType, Internals, InstanceCreationOptions>(
+    rxDatabase: RxDatabase<{}, Internals, InstanceCreationOptions>,
+    storageInstanceCreationParams: RxStorageInstanceCreationParams<RxDocumentType, InstanceCreationOptions>
+): Promise<RxStorageInstance<RxDocumentType, Internals, InstanceCreationOptions>> {
+    storageInstanceCreationParams.multiInstance = rxDatabase.multiInstance;
+    const storageInstance = await rxDatabase.storage.createStorageInstance<RxDocumentType>(
+        storageInstanceCreationParams
+    );
+    return storageInstance;
+}
 
-    return {
-        storageInstance,
-        localDocumentsStore
-    };
+/**
+ * Removes the main storage of the collection
+ * and all connected storages like the ones from the replication meta etc.
+ */
+export async function removeCollectionStorages(
+    storage: RxStorage<any, any>,
+    databaseInternalStorage: RxStorageInstance<InternalStoreDocType<any>, any, any>,
+    databaseInstanceToken: string,
+    databaseName: string,
+    collectionName: string,
+    multiInstance: boolean,
+    password?: string,
+    /**
+     * If no hash function is provided,
+     * we assume that the whole internal store is removed anyway
+     * so we do not have to delete the meta documents.
+     */
+    hashFunction?: HashFunction,
+) {
+    const allCollectionMetaDocs = await getAllCollectionDocuments(
+        databaseInternalStorage
+    );
+    const relevantCollectionMetaDocs = allCollectionMetaDocs
+        .filter(metaDoc => metaDoc.data.name === collectionName);
+    let removeStorages: {
+        collectionName: string;
+        schema: RxJsonSchema<any>;
+        isCollection: boolean;
+    }[] = [];
+    relevantCollectionMetaDocs.forEach(metaDoc => {
+        removeStorages.push({
+            collectionName: metaDoc.data.name,
+            schema: metaDoc.data.schema,
+            isCollection: true
+        });
+        metaDoc.data.connectedStorages.forEach(row => removeStorages.push({
+            collectionName: row.collectionName,
+            isCollection: false,
+            schema: row.schema
+        }));
+    });
+
+    // ensure uniqueness
+    const alreadyAdded = new Set<string>();
+    removeStorages = removeStorages.filter(row => {
+        const key = row.collectionName + '||' + row.schema.version;
+        if (alreadyAdded.has(key)) {
+            return false;
+        } else {
+            alreadyAdded.add(key);
+            return true;
+        }
+    });
+
+    // remove all the storages
+    await Promise.all(
+        removeStorages
+            .map(async (row) => {
+                const storageInstance = await storage.createStorageInstance<any>({
+                    collectionName: row.collectionName,
+                    databaseInstanceToken,
+                    databaseName,
+                    /**
+                     * multiInstance must be set to true if multiInstance
+                     * was true on the database
+                     * so that the storageInstance can inform other
+                     * instances about being removed.
+                     */
+                    multiInstance,
+                    options: {},
+                    schema: row.schema,
+                    password,
+                    devMode: overwritable.isDevMode()
+                });
+                await storageInstance.remove();
+                if (row.isCollection) {
+                    await runAsyncPluginHooks('postRemoveRxCollection', {
+                        storage,
+                        databaseName: databaseName,
+                        collectionName
+                    });
+                }
+            })
+    );
+
+    // remove the meta documents
+    if (hashFunction) {
+        const writeRows = relevantCollectionMetaDocs.map(doc => {
+            const writeDoc = flatCloneDocWithMeta(doc);
+            writeDoc._deleted = true;
+            writeDoc._meta.lwt = now();
+            writeDoc._rev = createRevision(
+                databaseInstanceToken,
+                doc
+            );
+            return {
+                previous: doc,
+                document: writeDoc
+            };
+        });
+        await databaseInternalStorage.bulkWrite(
+            writeRows,
+            'rx-database-remove-collection-all'
+        );
+    }
+}
+
+
+export function ensureRxCollectionIsNotClosed(
+    collection: RxCollection | RxCollectionBase<any, any, any, any, any>
+) {
+    if (collection.closed) {
+        throw newRxError(
+            'COL21',
+            {
+                collection: collection.name,
+                version: collection.schema.version
+            }
+        );
+    }
 }

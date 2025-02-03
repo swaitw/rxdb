@@ -1,4 +1,4 @@
-import * as path from 'path';
+import * as path from 'node:path';
 import {
     BehaviorSubject,
     firstValueFrom,
@@ -9,8 +9,7 @@ import {
 import {
     filter,
     map
-} from 'rxjs/operators';
-import { newRxError } from '../../rx-error';
+} from 'rxjs';
 import type {
     BackupOptions,
     RxBackupWriteEvent,
@@ -18,8 +17,13 @@ import type {
     RxDatabase,
     RxDocument,
     RxPlugin
-} from '../../types';
-import { getFromMapOrThrow, PROMISE_RESOLVE_FALSE, PROMISE_RESOLVE_TRUE, PROMISE_RESOLVE_VOID } from '../../util';
+} from '../../types/index.d.ts';
+import {
+    getFromMapOrCreate,
+    PROMISE_RESOLVE_FALSE,
+    PROMISE_RESOLVE_TRUE,
+    PROMISE_RESOLVE_VOID
+} from '../../plugins/utils/index.ts';
 import {
     clearFolder,
     deleteFolder,
@@ -30,7 +34,8 @@ import {
     setMeta,
     writeJsonToFile,
     writeToFile
-} from './file-util';
+} from './file-util.ts';
+import { getChangedDocumentsSince } from '../../rx-storage-helper.ts';
 
 
 /**
@@ -69,7 +74,7 @@ export async function backupSingleDocument(
                         attachmentsFolder,
                         attachment.id
                     );
-                    await writeToFile(attachmentFileLocation, content as Buffer);
+                    await writeToFile(attachmentFileLocation, content);
                     writtenFiles.push(attachmentFileLocation);
                 })
         );
@@ -80,13 +85,11 @@ export async function backupSingleDocument(
 
 const BACKUP_STATES_BY_DB: WeakMap<RxDatabase, RxBackupState[]> = new WeakMap();
 function addToBackupStates(db: RxDatabase, state: RxBackupState) {
-    if (!BACKUP_STATES_BY_DB.has(db)) {
-        BACKUP_STATES_BY_DB.set(db, []);
-    }
-    const ar = getFromMapOrThrow(BACKUP_STATES_BY_DB, db);
-    if (!ar) {
-        throw newRxError('SNH');
-    }
+    const ar = getFromMapOrCreate(
+        BACKUP_STATES_BY_DB,
+        db,
+        () => []
+    );
     ar.push(state);
 }
 
@@ -117,7 +120,7 @@ export class RxBackupState {
      * Do not call this while it is already running.
      * Returns true if there are more documents to process
      */
-    public async persistOnce() {
+    public persistOnce() {
         return this.persistRunning = this.persistRunning.then(() => this._persistOnce());
     }
 
@@ -126,50 +129,45 @@ export class RxBackupState {
 
         await Promise.all(
             Object
-                .keys(this.database.collections)
-                .map(async (collectionName) => {
+                .entries(this.database.collections)
+                .map(async ([collectionName, collection]) => {
+                    const primaryKey = collection.schema.primaryPath;
                     const processedDocuments: Set<string> = new Set();
-                    const collection: RxCollection = this.database.collections[collectionName];
 
                     await this.database.requestIdlePromise();
 
                     if (!meta.collectionStates[collectionName]) {
-                        meta.collectionStates[collectionName] = {
-                            lastSequence: 0
-                        };
+                        meta.collectionStates[collectionName] = {};
                     }
-                    let lastSequence = meta.collectionStates[collectionName].lastSequence;
+                    let lastCheckpoint = meta.collectionStates[collectionName].checkpoint;
 
                     let hasMore = true;
                     while (hasMore && !this.isStopped) {
                         await this.database.requestIdlePromise();
+                        const changesResult = await getChangedDocumentsSince(
+                            collection.storageInstance,
+                            this.options.batchSize ? this.options.batchSize : 0,
+                            lastCheckpoint
+                        );
+                        lastCheckpoint = changesResult.documents.length > 0 ? changesResult.checkpoint : lastCheckpoint;
+                        meta.collectionStates[collectionName].checkpoint = lastCheckpoint;
 
-                        const changesResult = await collection.storageInstance.getChangedDocuments({
-                            sinceSequence: lastSequence,
-                            limit: this.options.batchSize,
-                            direction: 'after'
-                        });
-                        lastSequence = changesResult.lastSequence;
-
-                        meta.collectionStates[collectionName].lastSequence = lastSequence;
-
-                        const docIds: string[] = changesResult.changedDocuments
-                            .filter(changedDocument => {
+                        const docIds: string[] = changesResult.documents
+                            .map(doc => doc[primaryKey])
+                            .filter(id => {
                                 if (
-                                    processedDocuments.has(changedDocument.id)
+                                    processedDocuments.has(id)
                                 ) {
                                     return false;
                                 } else {
-                                    processedDocuments.add(changedDocument.id);
+                                    processedDocuments.add(id);
                                     return true;
                                 }
                             })
-                            .map(r => r.id)
-                            // unique
-                            .filter((elem, pos, arr) => arr.indexOf(elem) === pos);
+                            .filter((elem, pos, arr) => arr.indexOf(elem) === pos); // unique
                         await this.database.requestIdlePromise();
 
-                        const docs: Map<string, RxDocument> = await collection.findByIds(docIds);
+                        const docs: Map<string, RxDocument> = await collection.findByIds(docIds).exec();
                         if (docs.size === 0) {
                             hasMore = false;
                             continue;
@@ -201,10 +199,8 @@ export class RxBackupState {
                                     });
                                 })
                         );
-
                     }
-
-                    meta.collectionStates[collectionName].lastSequence = lastSequence;
+                    meta.collectionStates[collectionName].checkpoint = lastCheckpoint;
                     await setMeta(this.options, meta);
                 })
         );
@@ -263,7 +259,7 @@ export function backup(
     return backupState;
 }
 
-export * from './file-util';
+export * from './file-util.ts';
 export const RxDBBackupPlugin: RxPlugin = {
     name: 'backup',
     rxdb: true,
@@ -273,10 +269,12 @@ export const RxDBBackupPlugin: RxPlugin = {
         }
     },
     hooks: {
-        preDestroyRxDatabase(db: RxDatabase) {
-            const states = BACKUP_STATES_BY_DB.get(db);
-            if (states) {
-                states.forEach(state => state.cancel());
+        preCloseRxDatabase: {
+            after: function preCloseRxDatabase(db: RxDatabase) {
+                const states = BACKUP_STATES_BY_DB.get(db);
+                if (states) {
+                    states.forEach(state => state.cancel());
+                }
             }
         }
     }

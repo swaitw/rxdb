@@ -1,32 +1,40 @@
 import assert from 'assert';
 import { clone } from 'async-test-util';
 
-import * as schemas from '../helper/schemas';
-import * as schemaObjects from '../helper/schema-objects';
+import {
+    schemaObjects,
+    schemas,
+    isFastMode
+} from '../../plugins/test-utils/index.mjs';
 import {
     createRxDatabase,
-    randomCouchString,
+    randomToken,
     RxCollection,
     RxDocument,
-    MangoQuery,
-} from '../../plugins/core';
+    MangoQuery
+} from '../../plugins/core/index.mjs';
 
 import {
-    getRxStoragePouch
-} from '../../plugins/pouchdb';
-import config from './config';
+    wrappedKeyCompressionStorage
+} from '../../plugins/key-compression/index.mjs';
 
+import config from './config.ts';
 
 describe('event-reduce.test.js', () => {
-    async function createCollection(eventReduce: boolean): Promise<RxCollection> {
+    async function createCollection(
+        eventReduce: boolean,
+        storage = config.storage.getStorage(),
+        keyCompression = false
+    ): Promise<RxCollection> {
         const db = await createRxDatabase({
-            name: randomCouchString(10),
-            storage: config.storage.getStorage(),
+            name: randomToken(10),
+            storage,
             eventReduce
         });
         const schema = clone(schemas.primaryHuman);
-        schema.keyCompression = false;
-        schema.indexes = ['age', 'lastName'];
+        schema.keyCompression = keyCompression;
+        schema.indexes = ['age', 'lastName', 'firstName'];
+        (schema as any).required.push('age');
         const collectionName = eventReduce ? 'with-event-reduce' : 'without-event-reduce';
         const collections = await db.addCollections({
             [collectionName]: {
@@ -39,27 +47,39 @@ describe('event-reduce.test.js', () => {
         res1: RxDocument<RxDocType>[],
         res2: RxDocument<RxDocType>[]
     ) {
-        assert.deepStrictEqual(
-            res1.map(d => d.primary),
-            res2.map(d => d.primary)
-        );
+        const keys1 = res1.map(d => d.primary);
+        const keys2 = res2.map(d => d.primary);
+
+        try {
+            assert.deepStrictEqual(keys1, keys2);
+        } catch (err) {
+            console.error('ensureResultsEqual() keys not equal');
+            console.dir(keys1);
+            console.dir(keys2);
+            throw err;
+        }
         assert.deepStrictEqual(
             res1.map(d => d.toJSON()),
             res2.map(d => d.toJSON())
         );
     }
-    async function testQueryResultForEqualness<RxDocType>(
-        col1: RxCollection<RxDocType>,
-        col2: RxCollection<RxDocType>,
+    async function testQueryResultForEquality<RxDocType>(
+        col1: RxCollection<RxDocType, {}, {}>,
+        col2: RxCollection<RxDocType, {}, {}>,
         queries: MangoQuery<RxDocType>[]
     ) {
-        await Promise.all(
-            queries.map(async (query) => {
-                const res1 = await col1.find(query).exec();
-                const res2 = await col2.find(query).exec();
+        for (const query of queries) {
+            const res1 = await col1.find(query).exec();
+            const res2 = await col2.find(query).exec();
+            try {
                 ensureResultsEqual(res1, res2);
-            })
-        );
+            } catch (err) {
+                console.error('NOT EQUAL FOR QUERY:');
+                console.dir(query);
+                console.dir(col1.find(query).getPreparedQuery());
+                throw err;
+            }
+        }
     }
 
     it('should have the same results on given data', async () => {
@@ -84,6 +104,12 @@ describe('event-reduce.test.js', () => {
         const colNoEventReduce = await createCollection(false);
         const colWithEventReduce = await createCollection(true);
 
+        await testQueryResultForEquality(
+            colNoEventReduce,
+            colWithEventReduce,
+            queries
+        );
+
         await Promise.all(
             writeData
                 .map(async (docData) => {
@@ -92,7 +118,7 @@ describe('event-reduce.test.js', () => {
                 })
         );
 
-        await testQueryResultForEqualness(
+        await testQueryResultForEquality(
             colNoEventReduce,
             colWithEventReduce,
             queries
@@ -107,18 +133,90 @@ describe('event-reduce.test.js', () => {
                 const docToUpdate = await col
                     .findOne('6eu7byz49iq9')
                     .exec(true);
-                await docToUpdate.atomicPatch({ age: 50 });
+                await docToUpdate.incrementalPatch({ age: 50 });
             })
         );
 
-        await testQueryResultForEqualness(
+        await testQueryResultForEquality(
             colNoEventReduce,
             colWithEventReduce,
             queries
         );
 
-        colNoEventReduce.database.destroy();
-        colWithEventReduce.database.destroy();
+        colNoEventReduce.database.close();
+        colWithEventReduce.database.close();
+    });
+
+    it('should work with the key-compression plugin', async () => {
+        const storage = wrappedKeyCompressionStorage({
+            storage: config.storage.getStorage()
+        });
+
+
+        const queries: MangoQuery<any>[] = [
+            { selector: { age: { '$gt': 10 } }, sort: [{ passportId: 'asc' }] },
+            { selector: { firstName: { $eq: 'Freeman' } }, sort: [{ passportId: 'asc' }] },
+            {
+                selector: {},
+                sort: [{ firstName: 'asc' }]
+            }
+        ];
+
+
+        const colNoEventReduce = await createCollection(false, storage, true);
+        const colWithEventReduce = await createCollection(true, storage, true);
+
+        await testQueryResultForEquality(
+            colNoEventReduce,
+            colWithEventReduce,
+            queries
+        );
+
+        const writeData = [
+            {
+                passportId: 's90j6hhznefj-bbbbb',
+                firstName: 'bbbbb',
+                lastName: 'Rogahn',
+                age: 25
+            },
+            {
+                passportId: '6eu7byz49iq9-aaaa',
+                firstName: 'aaaaa',
+                lastName: 'Dare',
+                age: 16
+            }
+        ];
+        await Promise.all(
+            writeData
+                .map(async (docData) => {
+                    await colNoEventReduce.insert(docData);
+                    await colWithEventReduce.insert(docData);
+                })
+        );
+        await testQueryResultForEquality(
+            colNoEventReduce,
+            colWithEventReduce,
+            queries
+        );
+
+
+        const insertForSortTest = {
+            passportId: 'for-sort-00000',
+            firstName: '00000',
+            lastName: 'Rogahn2',
+            age: 26
+        };
+        await colNoEventReduce.insert(insertForSortTest);
+        await colWithEventReduce.insert(insertForSortTest);
+
+        await testQueryResultForEquality(
+            colNoEventReduce,
+            colWithEventReduce,
+            queries
+        );
+
+        colNoEventReduce.database.close();
+        colWithEventReduce.database.close();
     });
 
     /**
@@ -126,7 +224,7 @@ describe('event-reduce.test.js', () => {
      * It generates random data writes and checks if the query result
      * is the same as the result calculated by event-reduce.
      */
-    new Array(config.isFastMode() ? 1 : 5).fill(0).forEach(() => {
+    new Array(isFastMode() ? 1 : 5).fill(0).forEach(() => {
         it('random data: should have the same results as without event-reduce', async () => {
             const colNoEventReduce = await createCollection(false);
             const colWithEventReduce = await createCollection(true);
@@ -141,36 +239,28 @@ describe('event-reduce.test.js', () => {
                 {
                     selector: {
                         age: {
-                            $gt: 20
+                            $gt: 20,
+                            $lt: 80
                         }
-                    },
-                    // TODO it should also work without the sorting
-                    // because RxDB should add predicatble sort if primary not used in sorting
-                    sort: [{
-                        passportId: 'asc'
-                    }]
+                    }
                 }
 
             ];
 
-            await testQueryResultForEqualness(
+            await testQueryResultForEquality(
                 colNoEventReduce,
                 colWithEventReduce,
                 queries
             );
 
             // add some
-            await Promise.all(
-                new Array(3)
-                    .fill(0)
-                    .map(async () => {
-                        const doc = schemaObjects.human();
-                        await colNoEventReduce.insert(doc);
-                        await colWithEventReduce.insert(doc);
-                    })
-            );
+            const docsData = new Array(3).fill(0).map(() => schemaObjects.humanData());
+            docsData.push(schemaObjects.humanData('age-is-20', 20));
+            docsData.push(schemaObjects.humanData('age-is-80', 80));
+            await colNoEventReduce.bulkInsert(docsData);
+            await colWithEventReduce.bulkInsert(docsData);
 
-            await testQueryResultForEqualness(
+            await testQueryResultForEquality(
                 colNoEventReduce,
                 colWithEventReduce,
                 queries
@@ -186,11 +276,11 @@ describe('event-reduce.test.js', () => {
                         .findOne()
                         .sort('lastName')
                         .exec(true);
-                    await docToUpdate.atomicPatch({ age: 50 });
+                    await docToUpdate.incrementalPatch({ age: 50 });
                 })
             );
 
-            await testQueryResultForEqualness(
+            await testQueryResultForEquality(
                 colNoEventReduce,
                 colWithEventReduce,
                 queries
@@ -210,7 +300,7 @@ describe('event-reduce.test.js', () => {
                 })
             );
 
-            await testQueryResultForEqualness(
+            await testQueryResultForEquality(
                 colNoEventReduce,
                 colWithEventReduce,
                 queries
@@ -230,15 +320,15 @@ describe('event-reduce.test.js', () => {
                 })
             );
 
-            await testQueryResultForEqualness(
+            await testQueryResultForEquality(
                 colNoEventReduce,
                 colWithEventReduce,
                 queries
             );
 
             // clean up
-            colNoEventReduce.database.destroy();
-            colWithEventReduce.database.destroy();
+            colNoEventReduce.database.close();
+            colWithEventReduce.database.close();
         });
     });
 });

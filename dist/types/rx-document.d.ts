@@ -1,256 +1,271 @@
 import { Observable } from 'rxjs';
-import type { RxDocument, RxCollection, RxDocumentData, RxDocumentWriteData, RxChangeEvent } from './types';
+import type { RxDocument, RxCollection, RxDocumentData, RxDocumentWriteData, UpdateQuery, CRDTEntry, ModifyFunction } from './types/index.d.ts';
 export declare const basePrototype: {
-    /**
-     * TODO
-     * instead of appliying the _this-hack
-     * we should make these accesors functions instead of getters.
-     */
-    readonly _data: import("./types").DeepReadonlyObject<{}> | undefined;
-    readonly primaryPath: undefined;
+    readonly primaryPath: import("./types/util").StringKeys<{
+        _deleted: boolean;
+        _attachments: {
+            [attachmentId: string]: import("./types/rx-storage").RxAttachmentData;
+        };
+        _rev: string;
+        _meta: import("./types/rx-document").RxDocumentMeta;
+    }> | undefined;
     readonly primary: any;
     readonly revision: string | undefined;
-    readonly deleted$: Observable<boolean> | undefined;
+    readonly deleted$: any;
+    readonly deleted$$: unknown;
     readonly deleted: boolean | undefined;
+    getLatest(this: RxDocument): RxDocument;
     /**
      * returns the observable which emits the plain-data of this document
      */
-    readonly $: Observable<any>;
-    _handleChangeEvent(this: import("./types").RxDocumentBase<{}, {}>, changeEvent: RxChangeEvent<any>): void;
-    /**
-     * emits the changeEvent to the upper instance (RxCollection)
-     */
-    $emit(this: import("./types").RxDocumentBase<{}, {}>, changeEvent: RxChangeEvent<any>): void;
+    readonly $: Observable<RxDocumentData<any>>;
+    readonly $$: any;
     /**
      * returns observable of the value of the given path
      */
-    get$(this: import("./types").RxDocumentBase<{}, {}>, path: string): Observable<any>;
+    get$(this: RxDocument, path: string): Observable<any>;
+    get$$(this: RxDocument, path: string): unknown;
     /**
      * populate the given path
      */
-    populate(this: import("./types").RxDocumentBase<{}, {}>, path: string): Promise<RxDocument | null>;
+    populate(this: RxDocument, path: string): Promise<RxDocument | null>;
     /**
      * get data by objectPath
+     * @hotPath Performance here is really important,
+     * run some tests before changing anything.
      */
-    get(this: import("./types").RxDocumentBase<{}, {}>, objPath: string): any | null;
-    toJSON(this: import("./types").RxDocumentBase<{}, {}>, withRevAndAttachments?: boolean): import("./types").DeepReadonlyObject<{
-        _deleted?: boolean | undefined;
+    get(this: RxDocument, objPath: string): any | null;
+    toJSON(this: RxDocument, withMetaFields?: boolean): import("./types/util").DeepReadonlyObject<{
+        _deleted: boolean;
         _attachments: {
-            [attachmentId: string]: import("./types").RxAttachmentData;
+            [attachmentId: string]: import("./types/rx-storage").RxAttachmentData;
         };
         _rev: string;
+        _meta: import("./types/rx-document").RxDocumentMeta;
     }>;
-    /**
-     * set data by objectPath
-     * This can only be called on temporary documents
-     */
-    set(this: import("./types").RxDocumentBase<{}, {}>, objPath: string, value: any): import("./types").RxDocumentBase<{}, {}> | undefined;
+    toMutableJSON(this: RxDocument, withMetaFields?: boolean): {
+        _deleted: boolean;
+        _attachments: {
+            [attachmentId: string]: import("./types/rx-storage").RxAttachmentData;
+        };
+        _rev: string;
+        _meta: import("./types/rx-document").RxDocumentMeta;
+    };
     /**
      * updates document
-     * @overwritten by plugin (optinal)
+     * @overwritten by plugin (optional)
      * @param updateObj mongodb-like syntax
      */
-    update(_updateObj: any): never;
+    update(_updateObj: UpdateQuery<any>): never;
+    incrementalUpdate(_updateObj: UpdateQuery<any>): never;
+    updateCRDT(_updateObj: CRDTEntry<any> | CRDTEntry<any>[]): never;
     putAttachment(): never;
     getAttachment(): never;
     allAttachments(): never;
     readonly allAttachments$: void;
+    modify<RxDocType>(this: RxDocument<RxDocType>, mutationFunction: ModifyFunction<RxDocType>, _context?: string): Promise<RxDocument>;
     /**
-     * runs an atomic update over the document
+     * runs an incremental update over the document
      * @param function that takes the document-data and returns a new data-object
      */
-    atomicUpdate(this: import("./types").RxDocumentBase<{}, {}>, mutationFunction: Function): Promise<RxDocument>;
+    incrementalModify(this: RxDocument, mutationFunction: ModifyFunction<any>, _context?: string): Promise<RxDocument>;
+    patch<RxDocType>(this: RxDocument<RxDocType>, patch: Partial<RxDocType>): Promise<RxDocument<RxDocType, {}, unknown>>;
     /**
      * patches the given properties
      */
-    atomicPatch<RxDocumentType = any>(this: RxDocument<RxDocumentType, {}>, patch: Partial<RxDocumentType>): Promise<RxDocument<RxDocumentType, {}>>;
+    incrementalPatch<RxDocumentType = any>(this: RxDocument<RxDocumentType>, patch: Partial<RxDocumentType>): Promise<RxDocument<RxDocumentType>>;
     /**
      * saves the new document-data
      * and handles the events
      */
-    _saveData<RxDocumentType_1>(this: RxDocument<RxDocumentType_1, {}>, newData: RxDocumentWriteData<RxDocumentType_1>, oldData: RxDocumentData<RxDocumentType_1>): Promise<void>;
+    _saveData<RxDocType>(this: RxDocument<RxDocType>, newData: RxDocumentWriteData<RxDocType>, oldData: RxDocumentData<RxDocType>): Promise<RxDocument<RxDocType>>;
     /**
-     * saves the temporary document and makes a non-temporary out of it
-     * Saving a temporary doc is basically the same as RxCollection.insert()
-     * @return false if nothing to save
+     * Remove the document.
+     * Notice that there is no hard delete,
+     * instead deleted documents get flagged with _deleted=true.
      */
-    save(this: import("./types").RxDocumentBase<{}, {}>): Promise<boolean>;
-    /**
-     * remove the document,
-     * this not not equal to a pouchdb.remove(),
-     * instead we keep the values and only set _deleted: true
-     */
-    remove(this: import("./types").RxDocumentBase<{}, {}>): Promise<RxDocument>;
-    destroy(): never;
+    remove(this: RxDocument): Promise<RxDocument>;
+    incrementalRemove(this: RxDocument): Promise<RxDocument>;
+    close(): never;
 };
 export declare function createRxDocumentConstructor(proto?: {
-    /**
-     * TODO
-     * instead of appliying the _this-hack
-     * we should make these accesors functions instead of getters.
-     */
-    readonly _data: import("./types").DeepReadonlyObject<{}> | undefined;
-    readonly primaryPath: undefined;
+    readonly primaryPath: import("./types/util").StringKeys<{
+        _deleted: boolean;
+        _attachments: {
+            [attachmentId: string]: import("./types/rx-storage").RxAttachmentData;
+        };
+        _rev: string;
+        _meta: import("./types/rx-document").RxDocumentMeta;
+    }> | undefined;
     readonly primary: any;
     readonly revision: string | undefined;
-    readonly deleted$: Observable<boolean> | undefined;
+    readonly deleted$: any;
+    readonly deleted$$: unknown;
     readonly deleted: boolean | undefined;
+    getLatest(this: RxDocument): RxDocument;
     /**
      * returns the observable which emits the plain-data of this document
      */
-    readonly $: Observable<any>;
-    _handleChangeEvent(this: import("./types").RxDocumentBase<{}, {}>, changeEvent: RxChangeEvent<any>): void;
-    /**
-     * emits the changeEvent to the upper instance (RxCollection)
-     */
-    $emit(this: import("./types").RxDocumentBase<{}, {}>, changeEvent: RxChangeEvent<any>): void;
+    readonly $: Observable<RxDocumentData<any>>;
+    readonly $$: any;
     /**
      * returns observable of the value of the given path
      */
-    get$(this: import("./types").RxDocumentBase<{}, {}>, path: string): Observable<any>;
+    get$(this: RxDocument, path: string): Observable<any>;
+    get$$(this: RxDocument, path: string): unknown;
     /**
      * populate the given path
      */
-    populate(this: import("./types").RxDocumentBase<{}, {}>, path: string): Promise<import("./types").RxDocumentBase<{}, {}> | null>;
+    populate(this: RxDocument, path: string): Promise<RxDocument | null>;
     /**
      * get data by objectPath
+     * @hotPath Performance here is really important,
+     * run some tests before changing anything.
      */
-    get(this: import("./types").RxDocumentBase<{}, {}>, objPath: string): any;
-    toJSON(this: import("./types").RxDocumentBase<{}, {}>, withRevAndAttachments?: boolean): import("./types").DeepReadonlyObject<{
-        _deleted?: boolean | undefined;
+    get(this: RxDocument, objPath: string): any | null;
+    toJSON(this: RxDocument, withMetaFields?: boolean): import("./types/util").DeepReadonlyObject<{
+        _deleted: boolean;
         _attachments: {
-            [attachmentId: string]: import("./types").RxAttachmentData;
+            [attachmentId: string]: import("./types/rx-storage").RxAttachmentData;
         };
         _rev: string;
+        _meta: import("./types/rx-document").RxDocumentMeta;
     }>;
-    /**
-     * set data by objectPath
-     * This can only be called on temporary documents
-     */
-    set(this: import("./types").RxDocumentBase<{}, {}>, objPath: string, value: any): import("./types").RxDocumentBase<{}, {}> | undefined;
+    toMutableJSON(this: RxDocument, withMetaFields?: boolean): {
+        _deleted: boolean;
+        _attachments: {
+            [attachmentId: string]: import("./types/rx-storage").RxAttachmentData;
+        };
+        _rev: string;
+        _meta: import("./types/rx-document").RxDocumentMeta;
+    };
     /**
      * updates document
-     * @overwritten by plugin (optinal)
+     * @overwritten by plugin (optional)
      * @param updateObj mongodb-like syntax
      */
-    update(_updateObj: any): never;
+    update(_updateObj: UpdateQuery<any>): never;
+    incrementalUpdate(_updateObj: UpdateQuery<any>): never;
+    updateCRDT(_updateObj: CRDTEntry<any> | CRDTEntry<any>[]): never;
     putAttachment(): never;
     getAttachment(): never;
     allAttachments(): never;
     readonly allAttachments$: void;
+    modify<RxDocType>(this: RxDocument<RxDocType>, mutationFunction: ModifyFunction<RxDocType>, _context?: string): Promise<RxDocument>;
     /**
-     * runs an atomic update over the document
+     * runs an incremental update over the document
      * @param function that takes the document-data and returns a new data-object
      */
-    atomicUpdate(this: import("./types").RxDocumentBase<{}, {}>, mutationFunction: Function): Promise<import("./types").RxDocumentBase<{}, {}>>;
+    incrementalModify(this: RxDocument, mutationFunction: ModifyFunction<any>, _context?: string): Promise<RxDocument>;
+    patch<RxDocType>(this: RxDocument<RxDocType>, patch: Partial<RxDocType>): Promise<RxDocument<RxDocType, {}, unknown>>;
     /**
      * patches the given properties
      */
-    atomicPatch<RxDocumentType = any>(this: RxDocument<RxDocumentType, {}>, patch: Partial<RxDocumentType>): Promise<RxDocument<RxDocumentType, {}>>;
+    incrementalPatch<RxDocumentType = any>(this: RxDocument<RxDocumentType>, patch: Partial<RxDocumentType>): Promise<RxDocument<RxDocumentType>>;
     /**
      * saves the new document-data
      * and handles the events
      */
-    _saveData<RxDocumentType_1>(this: RxDocument<RxDocumentType_1, {}>, newData: RxDocumentWriteData<RxDocumentType_1>, oldData: RxDocumentData<RxDocumentType_1>): Promise<void>;
+    _saveData<RxDocType>(this: RxDocument<RxDocType>, newData: RxDocumentWriteData<RxDocType>, oldData: RxDocumentData<RxDocType>): Promise<RxDocument<RxDocType>>;
     /**
-     * saves the temporary document and makes a non-temporary out of it
-     * Saving a temporary doc is basically the same as RxCollection.insert()
-     * @return false if nothing to save
+     * Remove the document.
+     * Notice that there is no hard delete,
+     * instead deleted documents get flagged with _deleted=true.
      */
-    save(this: import("./types").RxDocumentBase<{}, {}>): Promise<boolean>;
-    /**
-     * remove the document,
-     * this not not equal to a pouchdb.remove(),
-     * instead we keep the values and only set _deleted: true
-     */
-    remove(this: import("./types").RxDocumentBase<{}, {}>): Promise<import("./types").RxDocumentBase<{}, {}>>;
-    destroy(): never;
+    remove(this: RxDocument): Promise<RxDocument>;
+    incrementalRemove(this: RxDocument): Promise<RxDocument>;
+    close(): never;
 }): {
-    (this: import("./types").RxDocumentBase<{}, {}>, collection: RxCollection, jsonData: any): void;
+    (this: RxDocument, collection: RxCollection, docData: RxDocumentData<any>): void;
     prototype: {
-        /**
-         * TODO
-         * instead of appliying the _this-hack
-         * we should make these accesors functions instead of getters.
-         */
-        readonly _data: import("./types").DeepReadonlyObject<{}> | undefined;
-        readonly primaryPath: undefined;
+        readonly primaryPath: import("./types/util").StringKeys<{
+            _deleted: boolean;
+            _attachments: {
+                [attachmentId: string]: import("./types/rx-storage").RxAttachmentData;
+            };
+            _rev: string;
+            _meta: import("./types/rx-document").RxDocumentMeta;
+        }> | undefined;
         readonly primary: any;
         readonly revision: string | undefined;
-        readonly deleted$: Observable<boolean> | undefined;
+        readonly deleted$: any;
+        readonly deleted$$: unknown;
         readonly deleted: boolean | undefined;
+        getLatest(this: RxDocument): RxDocument;
         /**
          * returns the observable which emits the plain-data of this document
          */
-        readonly $: Observable<any>;
-        _handleChangeEvent(this: import("./types").RxDocumentBase<{}, {}>, changeEvent: RxChangeEvent<any>): void;
-        /**
-         * emits the changeEvent to the upper instance (RxCollection)
-         */
-        $emit(this: import("./types").RxDocumentBase<{}, {}>, changeEvent: RxChangeEvent<any>): void;
+        readonly $: Observable<RxDocumentData<any>>;
+        readonly $$: any;
         /**
          * returns observable of the value of the given path
          */
-        get$(this: import("./types").RxDocumentBase<{}, {}>, path: string): Observable<any>;
+        get$(this: RxDocument, path: string): Observable<any>;
+        get$$(this: RxDocument, path: string): unknown;
         /**
          * populate the given path
          */
-        populate(this: import("./types").RxDocumentBase<{}, {}>, path: string): Promise<import("./types").RxDocumentBase<{}, {}> | null>;
+        populate(this: RxDocument, path: string): Promise<RxDocument | null>;
         /**
          * get data by objectPath
+         * @hotPath Performance here is really important,
+         * run some tests before changing anything.
          */
-        get(this: import("./types").RxDocumentBase<{}, {}>, objPath: string): any;
-        toJSON(this: import("./types").RxDocumentBase<{}, {}>, withRevAndAttachments?: boolean): import("./types").DeepReadonlyObject<{
-            _deleted?: boolean | undefined;
+        get(this: RxDocument, objPath: string): any | null;
+        toJSON(this: RxDocument, withMetaFields?: boolean): import("./types/util").DeepReadonlyObject<{
+            _deleted: boolean;
             _attachments: {
-                [attachmentId: string]: import("./types").RxAttachmentData;
+                [attachmentId: string]: import("./types/rx-storage").RxAttachmentData;
             };
             _rev: string;
+            _meta: import("./types/rx-document").RxDocumentMeta;
         }>;
-        /**
-         * set data by objectPath
-         * This can only be called on temporary documents
-         */
-        set(this: import("./types").RxDocumentBase<{}, {}>, objPath: string, value: any): import("./types").RxDocumentBase<{}, {}> | undefined;
+        toMutableJSON(this: RxDocument, withMetaFields?: boolean): {
+            _deleted: boolean;
+            _attachments: {
+                [attachmentId: string]: import("./types/rx-storage").RxAttachmentData;
+            };
+            _rev: string;
+            _meta: import("./types/rx-document").RxDocumentMeta;
+        };
         /**
          * updates document
-         * @overwritten by plugin (optinal)
+         * @overwritten by plugin (optional)
          * @param updateObj mongodb-like syntax
          */
-        update(_updateObj: any): never;
+        update(_updateObj: UpdateQuery<any>): never;
+        incrementalUpdate(_updateObj: UpdateQuery<any>): never;
+        updateCRDT(_updateObj: CRDTEntry<any> | CRDTEntry<any>[]): never;
         putAttachment(): never;
         getAttachment(): never;
         allAttachments(): never;
         readonly allAttachments$: void;
+        modify<RxDocType>(this: RxDocument<RxDocType>, mutationFunction: ModifyFunction<RxDocType>, _context?: string): Promise<RxDocument>;
         /**
-         * runs an atomic update over the document
+         * runs an incremental update over the document
          * @param function that takes the document-data and returns a new data-object
          */
-        atomicUpdate(this: import("./types").RxDocumentBase<{}, {}>, mutationFunction: Function): Promise<import("./types").RxDocumentBase<{}, {}>>;
+        incrementalModify(this: RxDocument, mutationFunction: ModifyFunction<any>, _context?: string): Promise<RxDocument>;
+        patch<RxDocType>(this: RxDocument<RxDocType>, patch: Partial<RxDocType>): Promise<RxDocument<RxDocType, {}, unknown>>;
         /**
          * patches the given properties
          */
-        atomicPatch<RxDocumentType = any>(this: RxDocument<RxDocumentType, {}>, patch: Partial<RxDocumentType>): Promise<RxDocument<RxDocumentType, {}>>;
+        incrementalPatch<RxDocumentType = any>(this: RxDocument<RxDocumentType>, patch: Partial<RxDocumentType>): Promise<RxDocument<RxDocumentType>>;
         /**
          * saves the new document-data
          * and handles the events
          */
-        _saveData<RxDocumentType_1>(this: RxDocument<RxDocumentType_1, {}>, newData: RxDocumentWriteData<RxDocumentType_1>, oldData: RxDocumentData<RxDocumentType_1>): Promise<void>;
+        _saveData<RxDocType>(this: RxDocument<RxDocType>, newData: RxDocumentWriteData<RxDocType>, oldData: RxDocumentData<RxDocType>): Promise<RxDocument<RxDocType>>;
         /**
-         * saves the temporary document and makes a non-temporary out of it
-         * Saving a temporary doc is basically the same as RxCollection.insert()
-         * @return false if nothing to save
+         * Remove the document.
+         * Notice that there is no hard delete,
+         * instead deleted documents get flagged with _deleted=true.
          */
-        save(this: import("./types").RxDocumentBase<{}, {}>): Promise<boolean>;
-        /**
-         * remove the document,
-         * this not not equal to a pouchdb.remove(),
-         * instead we keep the values and only set _deleted: true
-         */
-        remove(this: import("./types").RxDocumentBase<{}, {}>): Promise<import("./types").RxDocumentBase<{}, {}>>;
-        destroy(): never;
+        remove(this: RxDocument): Promise<RxDocument>;
+        incrementalRemove(this: RxDocument): Promise<RxDocument>;
+        close(): never;
     };
 };
-export declare function defineGetterSetter(schema: any, valueObj: any, objPath?: string, thisObj?: boolean): void;
-export declare function createWithConstructor(constructor: any, collection: RxCollection, jsonData: any): RxDocument | null;
+export declare function createWithConstructor<RxDocType>(constructor: any, collection: RxCollection<RxDocType>, jsonData: RxDocumentData<RxDocType>): RxDocument<RxDocType> | null;
 export declare function isRxDocument(obj: any): boolean;
+export declare function beforeDocumentUpdateWrite<RxDocType>(collection: RxCollection<RxDocType>, newData: RxDocumentWriteData<RxDocType>, oldData: RxDocumentData<RxDocType>): Promise<any>;

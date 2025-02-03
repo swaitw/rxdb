@@ -3,74 +3,53 @@
 This list contains things that have to be done but will create breaking changes.
 
 
-### Rewrite prototype-merge
 
-Each collection creates it's own constructor for RxDocuments.
-This has a performance-benefit over using the Proxy-API which is also not supported in IE11.
-To create the constructor, the collection merges prototypes from RxDocument, RxSchema and the ORM-functions.
-The current implementation of this prototype-merging is very complicated and has hacky workarrounds to work with vue-devtools.
-We should rewrite it to a single pure function that returns the constructor.
-Instead of mergin the prototype into a single object, we should chain them together.
+## Final fields should not be automatically required
 
-### Refactor data-migrator
+https://discord.com/channels/969553741705539624/1237000453791678487/threads/1327921349808885831
 
- - The current implemetation does not use pouchdb's bulkDocs which is much faster.
- - This could have been done in much less code which would be easier to understand.
+## Move `final` definitions to the top level
+
+This should be done similar to where indexes or `encryption` fields are defined. This would 
+then allow to have `final` be also set for nested properties.
+
+
+---------------------------------
+## Maybe later (not sure if should be done)
+
+
+## Suggestions from #6787
+
+See https://github.com/pubkey/rxdb/pull/6787
+
+
+## Do not allow type mixing
+
+In the RxJsonSchema, a property of a document can have multiple types like
+
+```ts
+{
+    type?: JsonSchemaTypes | JsonSchemaTypes[];
+}
+```
+
+This is bad and should not be used. Instead each field must have exactly one type.
+Having mixed types causes many confusion, for example when the type is `['string', 'number']`,
+you could run a query selector like `$gt: 10` where it now is not clear if the string `foobar` is matching or not.
+
+## Add enum-compression to the key-compression plugin
+- Also rename the key-compression plugin to be just called 'compression'
+
+## RxStorage: Add RxStorage.info() which also calls parents
+
+Having an .info() method helps in debugging stuff and sending reports on problems etc.
+
+
+## Rename "RxDB Premium" to "RxDB Enterprise"
+
+Most "normal" users do not need premium access so we should name it "RxDB Enterprise" to make it more clear that it is intended to bought by companies.
+
+
+## Refactor data-migrator
+
  - Migration strategies should be defined [like in WatermelonDB](https://nozbe.github.io/WatermelonDB/Advanced/Migrations.html) with a `toVersion` version field. We should also add a `fromVersion` field so people could implement performance shortcuts by directly jumping several versions. The current migration strategies use the array index as `toVersion` which is confusing.
- 
-
-## Move rxjs into a plugin instead of having it internal
-RxDB relies heavily on rxjs. This made it easy in the past to handle the data flow inside of RxDB and also created feature-rich interfaces for users when they want to observe data.
-As long as you have rxjs in your project anyways, like you would have in an angular project, there is no problem with that.
-As soon as a user has another data-handling library like redux or mobx, rxjs increases the build size by 22kb (5kb gzipped) and also adds the burden to map rxjs observables into the own state management.
-
-The change would ensure that rxjs is no longer used inside of RxDB. And also there will be a RxDB-plugin which offers the same observable-features as there are today, but optional.
-This would also allow us to create plugins for mobx or react-hooks in the future.
-
-## Make RxDocument-acessors functions
-
-Things like `RxDocument.deleted$` or `RxDocument.$` should be functions instead of getters.
-We apply a hack atm which does not really work with typescript.
-https://github.com/microsoft/TypeScript/issues/39254#issuecomment-649831793
-
-
-## Make RxDcouments immutable
-At the current version of RxDB, RxDocuments mutate themself when they recieve ChangeEvents from the database.
-For example when you have a document where `name = 'foo'` and some update changes the state to `name = 'bar'` in the database, then the previous javascript-object will change it's own property to the have `doc.name === 'bar'`.
-This feature is great when you use a RxDocument with some change-detection like in angular or vue templates. You can use document properties directly in the template and all updates will be reflected in the view, without having to use observables or subscriptions.
-
-However this behavior is also confusing many times. When the state in the database is changed, it is not clear at which exact point of time the objects attribute changes. Also the self-mutating behavior created some problem with vue- and react-devtools because of how they clone objects.
-
-Also, to not confuse with fast changes that happen directly after each other, the whole json-data-to-RxDocument-piple has to be synchronous. With the change, this can be async which will allow us to have async post-result-transformations, like an asynchronous encryption plugin (with the Web Crypto API) or also move things into a webworker.
-
-The change would make all RxDocuments immutable. When you subscribe to a query and the same document is returned in the results, this will always be a new javascript object.
-
-## Remove deprecated 'recieved' methods.
-See [#3392](https://github.com/pubkey/rxdb/pull/3392)
-
-## Use exports field in package.json
-
-See [#3422](https://github.com/pubkey/rxdb/issues/3422)
-
-Use the [exports](https://webpack.js.org/guides/package-exports/) field in the `package.json` instead of the other fields like `main` or `jsnext:main`.
-Also we no longer need a package.json for each plugin in the `/plugins` folder, instead add the plugins to the exports field.
-Ensure that it works with typescript. Check the rxjs repo and find out how they did this.
-
-Rename the paths in the `exports` field in the `package.json` so that users can do `import {} from 'rxdb/core'` instead of the current `import {} from 'rxdb/plugins/core'`.
-
-
-## use replication primitives in graphql replication
-
-Atm we have duplicate code. Most of the graphql replication code can be switched out with the general replication plugin. Also we then could support bulk-push methods and replicate multiple changes from the local to the remote in the push replication.
-
-
-## Ensure deterministic sorting.
-The PouchDB RxStorage does not automatically add the primary key to a queries sort options.
-But this must be done to ensure deterministic sorting and to ensure the event-reduce algorithm works exactly the same on each storage. Adding the sort field creates errors because we cannot sort over non-indexes stuff. So maybe we should fix this at the index creation.
-
-# Maybe
-
-## Use Proxy instead of getters/setter on RxDocument
-Currently there is a hack invovled into the proxy-get-methods like `myDocument.firstName$` etc.
-This had to be done because IE11 does not support the Proxy-Object (and there is no way to polyfill).
-If we give up IE11-Support, we could use the proxy-object which would also allow to directly mutate arrays like described in [#561](https://github.com/pubkey/rxdb/issues/561). This would also give a performance-benefit.

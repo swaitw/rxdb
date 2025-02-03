@@ -5,27 +5,27 @@ import AsyncTestUtil from 'async-test-util';
 
 console.log('open page');
 
-fixture `Example page`
-    .page `http://0.0.0.0:8888/`;
+fixture`Example page`
+    .page`http://localhost:8888/`;
 
 
-test.page('http://0.0.0.0:8888/')('insert/edit/remove a hero', async t => {
+test.page('http://localhost:8888/')('insert/edit/remove a hero', async t => {
     // clear previous heroes
-    const heroElements = Selector('.hero-list-component .mat-list-item');
+    const heroElements = Selector('.hero-list-component mat-list-item');
     const amount = heroElements.count;
     for (let i = 0; i < amount; i++) {
-        await t.click('.fa-trash-o');
+        await t.click('.delete-button');
     }
 
     // input name
-    const heroNameInput = Selector('.hero-insert-component input[name=name]');
+    const heroNameInput = Selector('.hero-insert-component #insert-name');
     await t
         .expect(heroNameInput.value).eql('', 'input is empty')
         .typeText(heroNameInput, 'BobKelso')
         .expect(heroNameInput.value).contains('Kelso', 'input contains name');
 
     // input color
-    const heroColorInput = Selector('.hero-insert-component input[name=color]');
+    const heroColorInput = Selector('.hero-insert-component #insert-color');
     await t
         .expect(heroColorInput.value).eql('', 'input is empty')
         .typeText(heroColorInput, 'black')
@@ -35,19 +35,19 @@ test.page('http://0.0.0.0:8888/')('insert/edit/remove a hero', async t => {
     await t.click('.hero-insert-component button');
     await AsyncTestUtil.wait(200);
 
-    const heroListElement = Selector('.hero-list-component .mat-list-item');
+    const heroListElement = Selector('.hero-list-component mat-list-item');
     await t.expect(heroListElement.textContent).contains('Kelso', 'list-item contains name');
 
 
     // open edit form
-    await t.click('.fa-pencil-square-o');
+    await t.click('.edit-button');
 
     // set value
     await t
-        .click('.mat-input-element')
+        .click('hero-edit input[type=number]')
         .pressKey('ctrl+a delete');
-    await t.typeText('.mat-input-element', '11');
-    await t.click('.submitButton');
+    await t.typeText('hero-edit input[type=number]', '11');
+    await t.click('hero-edit .submitButton');
     await AsyncTestUtil.wait(100);
 
     // edit form should be closed
@@ -56,11 +56,11 @@ test.page('http://0.0.0.0:8888/')('insert/edit/remove a hero', async t => {
     }
 
     // remove again
-    await t.click('.fa-trash-o');
+    await t.click('.delete-button');
 });
 
 
-test.page('http://0.0.0.0:8888/multitab.html?frames=2')('multitab: insert hero and check other tab', async t => {
+test.page('http://localhost:8888/multitab.html?frames=2')('multitab: insert hero and check other tab', async t => {
 
     await t.switchToIframe('#frame_0');
 
@@ -68,8 +68,8 @@ test.page('http://0.0.0.0:8888/multitab.html?frames=2')('multitab: insert hero a
     await Selector('.hero-insert-component button');
 
     await t
-        .typeText('.hero-insert-component input[name=name]', 'SteveIrwin')
-        .typeText('.hero-insert-component input[name=color]', 'red')
+        .typeText('.hero-insert-component #insert-name', 'SteveIrwin')
+        .typeText('.hero-insert-component #insert-color', 'red')
         .click('.hero-insert-component button');
 
     await t.switchToMainWindow();
@@ -77,26 +77,28 @@ test.page('http://0.0.0.0:8888/multitab.html?frames=2')('multitab: insert hero a
     // check if in other iframe
     await t.switchToIframe('#frame_1');
     await AsyncTestUtil.wait(100);
-    const heroElements = Selector('.hero-list-component .mat-list-item');
+    const heroElements = Selector('.hero-list-component mat-list-item');
     await t.expect(heroElements.count).eql(1);
 
-    const heroListElement = Selector('.hero-list-component .mat-list-item:last-of-type');
+    const heroListElement = Selector('.hero-list-component mat-list-item:last-of-type');
     await t.expect(heroListElement.textContent).contains('Irwin', 'list-item contains name');
 });
 
 const tabsAmount = 4;
-test.page('http://0.0.0.0:8888/multitab.html?frames=' + tabsAmount)('leader-election: Exact one tab should become leader', async t => {
+test.page('http://localhost:8888/multitab.html?frames=' + tabsAmount)('leader-election: Exact one tab should become leader', async t => {
 
     // wait until last tab loaded
     await t.switchToIframe('#frame_' + (tabsAmount - 1));
     await AsyncTestUtil.wait(1000);
-    const heroNameInput = Selector('.hero-insert-component input[name=name]');
+    console.log('insert !!!');
+    const heroNameInput = Selector('.hero-insert-component #insert-name');
     await t.typeText(heroNameInput, 'foobar');
     await t.switchToMainWindow();
 
     // wait until at least one becomes leader
     let currentLeader = null;
     await AsyncTestUtil.waitUntil(async () => {
+        console.log('await leader once!');
         let ret = false;
         for (let i = 0; i < tabsAmount; i++) {
             await t.switchToIframe('#frame_' + i);
@@ -108,7 +110,7 @@ test.page('http://0.0.0.0:8888/multitab.html?frames=' + tabsAmount)('leader-elec
             await t.switchToMainWindow();
         }
         return ret;
-    });
+    }, 10 * 1000, 100);
 
     await AsyncTestUtil.wait(200); // w8 a bit
     // ensure still only one is leader

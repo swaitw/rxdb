@@ -4,21 +4,27 @@
   ],
   "statusCheckVerify": true,
   "ignoreDeps": [
+    "rxdb-old",
+    "expo",
+    "babel-preset-expo",
+    "jest-expo"
   ],
   "automerge": true,
   "major": {
     "automerge": true
   },
   "ignorePaths": [
-    "docs-src/files/logo/package.json",
-    "docs/files/files/logo/package.json",
+    "docs-src/static/files/logo/package.json",
+    "docs-src/package.json",
+    "docs-src/docusaurus-lunr-search-main/package.json",
     "docs/files/logo/package.json",
     "examples/ionic2/package.json",
-    "examples/electron/package.json",
-    "examples/electron-remote/package.json"
+    "examples/supabase/package.json",
+    "examples/flutter/pubspec.yaml",
+    "src/plugins/flutter/dart/pubspec.yaml"
   ],
   "rebaseStalePrs": true,
+  "prConcurrentLimit": 8,
   "prHourlyLimit": 2,
-  "prCreation": "not-pending",
   "dependencyDashboard": false
 }

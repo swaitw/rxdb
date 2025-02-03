@@ -1,32 +1,36 @@
 import assert from 'assert';
 import clone from 'clone';
+import {
+    assertThrows
+} from 'async-test-util';
 import AsyncTestUtil from 'async-test-util';
 
-import config from './config';
-import * as schemas from '../helper/schemas';
-import * as schemaObjects from '../helper/schema-objects';
+import config, { describeParallel } from './config.ts';
+import {
+    schemaObjects,
+    schemas
+} from '../../plugins/test-utils/index.mjs';
 
-import { checkSchema } from '../../plugins/dev-mode';
+import { checkSchema } from '../../plugins/dev-mode/index.mjs';
 
 import {
     createRxDatabase,
     sortObject,
-    randomCouchString,
+    randomToken,
     createRxSchema,
     RxJsonSchema,
     getIndexes,
-    normalize,
+    normalizeRxJsonSchema,
     getFinalFields,
     getPreviousVersions,
     getSchemaByObjectPath,
-} from '../../plugins/core';
+    fillWithDefaultSettings,
+    fillObjectWithDefaults,
+    defaultHashSha256,
+    ensureNotFalsy
+} from '../../plugins/core/index.mjs';
 
-import {
-    getRxStoragePouch
-} from '../../plugins/pouchdb';
-
-
-config.parallel('rx-schema.test.js', () => {
+describeParallel('rx-schema.test.ts', () => {
     describe('static', () => {
         describe('.getIndexes()', () => {
             it('get single indexes', () => {
@@ -55,14 +59,45 @@ config.parallel('rx-schema.test.js', () => {
                 assert.ok(Array.isArray(indexes[0]));
                 assert.deepStrictEqual(indexes[0], ['age', 'passportCountry']);
             });
-            it('get index from array', () => {
-                const indexes = getIndexes(schemas.humanArrayIndex);
-                assert.ok(Array.isArray(indexes));
-                assert.ok(Array.isArray(indexes[0]));
-                assert.deepStrictEqual(indexes[0], ['jobs.[].name']);
-            });
         });
         describe('.checkSchema()', () => {
+            it('should not throw error for such schema', async () => {
+                const userSchema = {
+                    title: 'user schema',
+                    description: 'describes a user',
+                    type: 'object',
+                    version: 0,
+
+                    primaryKey: 'id',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            maxLength: 100,
+                        },
+                        birthday: {
+                            type: ['string', 'null'],
+                            default: null,
+                        },
+                        createTime: {
+                            type: 'string',
+                        },
+                    },
+                    required: ['id', 'createTime'],
+                };
+
+                const db = await createRxDatabase({
+                    name: randomToken(10),
+                    storage: config.storage.getStorage(),
+                });
+                await db.addCollections({
+                    users: {
+                        schema: userSchema,
+                    },
+                });
+
+                await db.close();
+            });
+
             describe('positive', () => {
                 it('validate human', () => {
                     checkSchema(schemas.human);
@@ -88,16 +123,67 @@ config.parallel('rx-schema.test.js', () => {
                 it('validates deep nested indexes', () => {
                     checkSchema(schemas.humanWithDeepNestedIndexes);
                 });
+                it('validate anyOf', () => {
+                    checkSchema({
+                        title: 'anyOf schema',
+                        version: 0,
+                        description: 'uses anyOf',
+                        primaryKey: 'id',
+                        type: 'object',
+                        properties: {
+                            id: {
+                                type: 'string',
+                                maxLength: 100
+                            },
+                            foo: {
+                                anyOf: [
+                                    {
+                                        type: 'string'
+                                    },
+                                    {
+                                        type: 'number'
+                                    }
+                                ]
+                            },
+                        },
+                        required: ['id', 'foo']
+                    });
+                });
+                it('validate items array', () => {
+                    checkSchema({
+                        title: 'items array schema',
+                        version: 0,
+                        description: 'uses items array',
+                        primaryKey: 'id',
+                        type: 'object',
+                        properties: {
+                            id: {
+                                type: 'string',
+                                maxLength: 100
+                            },
+                            foo: {
+                                type: 'array',
+                                items: [
+                                    {
+                                        type: 'number'
+                                    }
+                                ]
+                            },
+                        },
+                        required: ['id', 'foo']
+                    });
+                });
             });
             describe('negative', () => {
-                it('break when index defined at object property level', () => {
-                    assert.throws(() => checkSchema({
+                it('break when index defined at object property level', async () => {
+                    await assertThrows(() => checkSchema({
                         version: 0,
                         primaryKey: 'id',
                         type: 'object',
                         properties: {
                             id: {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             },
                             name: {
                                 type: 'string',
@@ -123,53 +209,34 @@ config.parallel('rx-schema.test.js', () => {
                             }
                         },
                         required: ['job']
-                    }), Error);
+                    }), 'RxError', 'SC26');
                 });
-                it('break when compoundIndex is specified in a separate field', () => {
-                    assert.throws(() => checkSchema({
-                        version: 0,
-                        primaryKey: 'id',
-                        type: 'object',
-                        properties: {
-                            id: {
-                                type: 'string'
-                            },
-                            name: {
-                                type: 'string',
-                                index: true
-                            } as any
-                        },
-                        compoundIndexes: ['id', 'name']
-                    } as any), Error);
-                });
-                it('throw when underscore field is used as property name', () => {
-                    assert.throws(() => checkSchema({
+                it('throw when underscore field is used as property name', async () => {
+                    await assertThrows(() => checkSchema({
                         title: 'schema',
                         version: 0,
-                        primaryKey: '_id',
+                        primaryKey: '_asdf',
                         type: 'object',
                         properties: {
-                            _id: {
-                                type: 'string'
+                            _asdf: {
+                                type: 'string',
+                                maxLength: 100
                             },
                             firstName: {
                                 type: 'string'
                             }
                         },
                         required: ['firstName']
-                    } as any), Error);
+                    } as any), 'RxError');
                 });
                 it('break when index is no string', () => {
-                    assert.throws(() => checkSchema(schemas.noStringIndex), Error);
+                    assert.throws(() => checkSchema(schemas.noStringIndex));
                 });
                 it('break when index does not exist in schema properties', () => {
-                    assert.throws(() => checkSchema(schemas.notExistingIndex), Error);
+                    assert.throws(() => checkSchema(schemas.notExistingIndex));
                 });
                 it('break compoundIndex key is no string', () => {
-                    assert.throws(() => checkSchema(schemas.compoundIndexNoString), Error);
-                });
-                it('break on wrong formated compundIndex', () => {
-                    assert.throws(() => checkSchema(schemas.wrongCompoundFormat), Error);
+                    assert.throws(() => checkSchema(schemas.compoundIndexNoString));
                 });
                 it('break when dots in fieldname', () => {
                     assert.throws(() => checkSchema({
@@ -180,10 +247,11 @@ config.parallel('rx-schema.test.js', () => {
                         type: 'object',
                         properties: {
                             'my.field': {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             }
                         }
-                    }), Error);
+                    }));
                 });
                 it('break when required is set via required: true', () => {
                     assert.throws(() => checkSchema({
@@ -194,10 +262,11 @@ config.parallel('rx-schema.test.js', () => {
                         properties: {
                             'myfield': {
                                 type: 'string',
-                                required: true
+                                required: true,
+                                maxLength: 100
                             } as any
                         }
-                    }), Error);
+                    }));
                 });
 
                 /**
@@ -212,12 +281,13 @@ config.parallel('rx-schema.test.js', () => {
                         properties: {
                             id: {
                                 type: 'string',
+                                maxLength: 100
                             },
                             'firstName$': {
                                 type: 'string'
                             }
                         }
-                    }), Error);
+                    }));
                     assert.throws(() => checkSchema({
                         title: 'schema',
                         version: 0,
@@ -227,12 +297,13 @@ config.parallel('rx-schema.test.js', () => {
                         properties: {
                             id: {
                                 type: 'string',
+                                maxLength: 100
                             },
                             'first$Name': {
                                 type: 'string'
                             }
                         }
-                    }), Error);
+                    }));
                 });
                 it('should not allow $-char in nested fieldnames', () => {
                     assert.throws(() => checkSchema({
@@ -244,6 +315,7 @@ config.parallel('rx-schema.test.js', () => {
                         properties: {
                             id: {
                                 type: 'string',
+                                maxLength: 100
                             },
                             'things': {
                                 type: 'object',
@@ -254,7 +326,7 @@ config.parallel('rx-schema.test.js', () => {
                                 }
                             }
                         }
-                    }), Error);
+                    }));
                     assert.throws(() => checkSchema({
                         title: 'schema',
                         version: 0,
@@ -264,6 +336,7 @@ config.parallel('rx-schema.test.js', () => {
                         properties: {
                             id: {
                                 type: 'string',
+                                maxLength: 100
                             },
                             'things': {
                                 type: 'object',
@@ -274,10 +347,10 @@ config.parallel('rx-schema.test.js', () => {
                                 }
                             }
                         }
-                    }), Error);
+                    }));
                 });
-                it('should not allow ending lodash _ in fieldnames (reserved for populate)', () => {
-                    assert.throws(() => checkSchema({
+                it('should not allow ending lodash _ in fieldnames (reserved for populate)', async () => {
+                    await assertThrows(() => checkSchema({
                         title: 'schema',
                         version: 0,
                         primaryKey: 'id',
@@ -286,14 +359,15 @@ config.parallel('rx-schema.test.js', () => {
                         properties: {
                             id: {
                                 type: 'string',
+                                maxLength: 100
                             },
                             'firstName_': {
                                 type: 'string'
                             }
                         }
-                    }), Error, 'underscore');
+                    }), 'RxError', 'SC1');
                     // nested
-                    assert.throws(() => checkSchema({
+                    await assertThrows(() => checkSchema({
                         title: 'schema',
                         version: 0,
                         description: 'dot in fieldname',
@@ -302,6 +376,7 @@ config.parallel('rx-schema.test.js', () => {
                         properties: {
                             id: {
                                 type: 'string',
+                                maxLength: 100
                             },
                             'foo': {
                                 type: 'object',
@@ -312,7 +387,7 @@ config.parallel('rx-schema.test.js', () => {
                                 }
                             }
                         }
-                    }), Error, 'underscore');
+                    }), 'RxError', 'SC1');
                 });
                 it('should not allow RxDocument-properties as top-fieldnames (own)', () => {
                     assert.throws(() => checkSchema({
@@ -322,51 +397,54 @@ config.parallel('rx-schema.test.js', () => {
                         primaryKey: 'collection',
                         type: 'object',
                         properties: {
-                            'collection': {
-                                type: 'string'
+                            collection: {
+                                type: 'string',
+                                maxLength: 100
                             }
                         }
-                    }), Error);
+                    }));
                 });
                 it('should not allow RxDocument-properties as top-fieldnames (prototype)', () => {
                     assert.throws(() => checkSchema({
                         title: 'schema',
                         version: 0,
-                        description: 'save as fieldname',
-                        primaryKey: 'save',
+                        description: 'populate as fieldname',
+                        primaryKey: 'populate',
                         type: 'object',
                         properties: {
-                            'save': {
-                                type: 'string'
+                            populate: {
+                                type: 'string',
+                                maxLength: 100
                             }
                         }
-                    }), Error);
+                    }));
                 });
                 it('throw when no version', () => {
                     assert.throws(() => checkSchema({
                         title: 'schema',
-                        description: 'save as fieldname',
+                        description: 'schema without version',
                         type: 'object',
                         properties: {
                             'foobar': {
                                 type: 'string'
                             }
                         }
-                    } as any), Error);
+                    } as any));
                 });
                 it('throw when version < 0', () => {
                     assert.throws(() => checkSchema({
                         title: 'schema',
                         version: -10,
-                        description: 'save as fieldname',
+                        description: 'schema with negative version',
                         primaryKey: 'foobar',
                         type: 'object',
                         properties: {
                             'foobar': {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             }
                         }
-                    }), Error);
+                    }));
                 });
                 it('throw when version no number', () => {
                     assert.throws(() => checkSchema({
@@ -376,10 +454,11 @@ config.parallel('rx-schema.test.js', () => {
                         primaryKey: 'foobar',
                         properties: {
                             'foobar': {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             }
                         }
-                    } as any), Error);
+                    } as any));
                 });
                 it('throw when defaults on non-first-level field', () => {
                     assert.throws(() => checkSchema({
@@ -390,7 +469,8 @@ config.parallel('rx-schema.test.js', () => {
                         type: 'object',
                         properties: {
                             foobar: {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             },
                             deeper: {
                                 type: 'object',
@@ -402,7 +482,7 @@ config.parallel('rx-schema.test.js', () => {
                                 }
                             }
                         }
-                    }), Error);
+                    }));
                 });
                 it('throw when _id is not primary', () => {
                     assert.throws(() => checkSchema({
@@ -413,7 +493,8 @@ config.parallel('rx-schema.test.js', () => {
                         type: 'object',
                         properties: {
                             userId: {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             },
                             _id: {
                                 type: 'string',
@@ -423,11 +504,35 @@ config.parallel('rx-schema.test.js', () => {
                             }
                         },
                         required: ['firstName']
-                    }), Error);
+                    }));
+                });
+                /**
+                 * @link https://github.com/pubkey/rxdb/issues/4926#issuecomment-1712223984
+                 */
+                it('throw when $ref field is used', async () => {
+                    await assertThrows(
+                        () => checkSchema({
+                            version: 0,
+                            primaryKey: 'userId',
+                            type: 'object',
+                            properties: {
+                                userId: {
+                                    type: 'string',
+                                    maxLength: 100
+                                },
+                                sub: {
+                                    $ref: '#/definitions/person'
+                                } as any
+                            },
+                            required: ['firstName']
+                        }),
+                        'RxError',
+                        'SC40'
+                    );
                 });
             });
         });
-        describe('.normalize()', () => {
+        describe('.fillWithDefaultSettings() / .normalizeRxJsonSchema()', () => {
             it('should sort array with objects and strings', () => {
                 const val = ['firstName', 'lastName', {
                     name: 2
@@ -436,58 +541,65 @@ config.parallel('rx-schema.test.js', () => {
                 assert.deepStrictEqual(val, normalized);
             });
             it('should be the same object', () => {
-                const schema = normalize(schemas.humanNormalizeSchema1);
+                const schema = normalizeRxJsonSchema(schemas.humanNormalizeSchema1);
                 assert.deepStrictEqual(schema, schemas.humanNormalizeSchema1);
             });
             it('should deep sort one schema with different orders to be the same', () => {
-                const schema1 = normalize(schemas.humanNormalizeSchema1);
-                const schema2 = normalize(schemas.humanNormalizeSchema2);
+                const schema1 = normalizeRxJsonSchema(schemas.humanNormalizeSchema1);
+                const schema2 = normalizeRxJsonSchema(schemas.humanNormalizeSchema2);
                 assert.deepStrictEqual(schema1, schema2);
             });
             it('should not sort indexes array in the schema (related with https://github.com/pubkey/rxdb/pull/1695#issuecomment-554636433)', () => {
-                const schema = normalize(schemas.humanWithSimpleAndCompoundIndexes);
+                const schema = normalizeRxJsonSchema(schemas.humanWithSimpleAndCompoundIndexes);
                 assert.deepStrictEqual(schema.indexes, schemas.humanWithSimpleAndCompoundIndexes.indexes);
+            });
+            it('should have added the primaryKey to indexes that did not contain it', () => {
+                const schema: RxJsonSchema<any> = fillWithDefaultSettings({
+                    primaryKey: 'id',
+                    version: 0,
+                    type: 'object',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            maxLength: 100
+                        }
+                    },
+                    required: ['id'],
+                    indexes: [
+                        'age',
+                        ['foo', 'bar'],
+                        ['bar', 'id', 'foo']
+                    ]
+                });
+                const normalizedSchema = normalizeRxJsonSchema(schema);
+                ensureNotFalsy(normalizedSchema.indexes).forEach(index => {
+                    assert.ok(index.includes('id'));
+                });
             });
         });
         describe('.create()', () => {
             describe('positive', () => {
                 it('create human', () => {
-                    const schema = createRxSchema(schemas.human);
+                    const schema = createRxSchema(schemas.human, defaultHashSha256);
                     assert.strictEqual(schema.constructor.name, 'RxSchema');
                 });
                 it('create nested', () => {
-                    const schema = createRxSchema(schemas.nestedHuman);
+                    const schema = createRxSchema(schemas.nestedHuman, defaultHashSha256);
                     assert.strictEqual(schema.constructor.name, 'RxSchema');
                 });
                 it('create point', () => {
-                    const schema = createRxSchema(schemas.point);
+                    const schema = createRxSchema(schemas.point, defaultHashSha256);
                     assert.strictEqual(schema.constructor.name, 'RxSchema');
                 });
                 it('should have indexes human', () => {
-                    const schema = createRxSchema(schemas.human);
-                    assert.strictEqual(schema.indexes[0][0], 'firstName');
+                    const schema = createRxSchema(schemas.human, defaultHashSha256);
+                    assert.strictEqual(schema.indexes[0][0], '_deleted');
+                    assert.strictEqual(schema.indexes[0][1], 'firstName');
                 });
             });
             describe('negative', () => {
                 it('broken schema (nostringIndex)', () => {
-                    assert.throws(() => createRxSchema(schemas.noStringIndex), Error);
-                });
-                it('first-level field is "language" is forbitten', () => {
-                    assert.throws(() => createRxSchema({
-                        title: 'schema',
-                        version: 0,
-                        primaryKey: 'foo',
-                        description: 'dot in fieldname',
-                        type: 'object',
-                        properties: {
-                            foo: {
-                                type: 'string'
-                            },
-                            language: {
-                                type: 'string'
-                            }
-                        }
-                    }), Error);
+                    assert.throws(() => createRxSchema(schemas.noStringIndex, defaultHashSha256));
                 });
             });
         });
@@ -500,6 +612,7 @@ config.parallel('rx-schema.test.js', () => {
                     properties: {
                         myField: {
                             type: 'string',
+                            maxLength: 100,
                             final: true
                         }
                     }
@@ -513,7 +626,8 @@ config.parallel('rx-schema.test.js', () => {
                     type: 'object',
                     properties: {
                         myField: {
-                            type: 'string'
+                            type: 'string',
+                            maxLength: 100
                         }
                     }
                 });
@@ -522,13 +636,6 @@ config.parallel('rx-schema.test.js', () => {
         });
     });
     describe('instance', () => {
-        describe('.normalized', () => {
-            it('should normalize if schema has not been normalized yet', () => {
-                const schema = createRxSchema(schemas.humanNormalizeSchema1);
-                const normalized = schema.normalized;
-                assert.notStrictEqual(normalized, null);
-            });
-        });
         describe('.getPreviousVersions()', () => {
             it('get empty array when current==0', () => {
                 const schema = createRxSchema({
@@ -538,10 +645,11 @@ config.parallel('rx-schema.test.js', () => {
                     type: 'object',
                     properties: {
                         'foobar': {
-                            type: 'string'
+                            type: 'string',
+                            maxLength: 100
                         }
                     }
-                });
+                }, defaultHashSha256);
                 assert.deepStrictEqual(
                     getPreviousVersions(schema.jsonSchema),
                     []
@@ -555,10 +663,11 @@ config.parallel('rx-schema.test.js', () => {
                     type: 'object',
                     properties: {
                         'foobar': {
-                            type: 'string'
+                            type: 'string',
+                            maxLength: 100
                         }
                     }
-                });
+                }, defaultHashSha256);
                 assert.deepStrictEqual(
                     getPreviousVersions(schema.jsonSchema),
                     [0, 1, 2, 3, 4]
@@ -567,152 +676,44 @@ config.parallel('rx-schema.test.js', () => {
         });
         describe('.hash', () => {
             describe('positive', () => {
-                it('should hash', () => {
-                    const schema = createRxSchema(schemas.human);
-                    const hash = schema.hash;
+                it('should hash', async () => {
+                    const schema = createRxSchema(schemas.human, defaultHashSha256);
+                    const hash = await schema.hash;
                     assert.strictEqual(typeof hash, 'string');
-                    assert.ok(hash.length > 10);
+                    assert.ok(hash.length >= 5);
                 });
-                it('should normalize one schema with two different orders and generate for each the same hash', () => {
-                    const schema1 = createRxSchema(schemas.humanNormalizeSchema1);
-                    const schema2 = createRxSchema(schemas.humanNormalizeSchema2);
-                    const hash1 = schema1.hash;
-                    const hash2 = schema2.hash;
+                it('should normalize one schema with two different orders and generate for each the same hash', async () => {
+                    const schema1 = createRxSchema(schemas.humanNormalizeSchema1, defaultHashSha256);
+                    const schema2 = createRxSchema(schemas.humanNormalizeSchema2, defaultHashSha256);
+                    const hash1 = await schema1.hash;
+                    const hash2 = await schema2.hash;
                     assert.strictEqual(hash1, hash2);
                 });
-            });
-        });
-        describe('.validate()', () => {
-            describe('positive', () => {
-                it('validate one human', () => {
-                    const schema = createRxSchema(schemas.human);
-                    const obj: any = schemaObjects.human();
-                    schema.validate(obj);
-                });
-                it('validate one point', () => {
-                    const schema = createRxSchema(schemas.point);
-                    const obj: any = schemaObjects.point();
-                    schema.validate(obj);
-                });
-                it('validate without non-required', () => {
-                    const schema = createRxSchema(schemas.human);
-                    const obj: any = schemaObjects.human();
-                    delete obj.age;
-                    schema.validate(obj);
-                });
-                it('validate nested', () => {
-                    const schema = createRxSchema(schemas.nestedHuman);
-                    const obj: any = schemaObjects.nestedHuman();
-                    schema.validate(obj);
-                });
-            });
-            describe('negative', () => {
-                it('required field not given', () => {
-                    const schema = createRxSchema(schemas.human);
-                    const obj: any = schemaObjects.human();
-                    obj['_id'] = randomCouchString(10);
-                    delete obj.lastName;
-                    assert.throws(() => schema.validate(obj), Error);
-                });
-                it('overflow maximum int', () => {
-                    const schema = createRxSchema(schemas.human);
-                    const obj: any = schemaObjects.human();
-                    obj['_id'] = randomCouchString(10);
-                    obj.age = 1000;
-                    assert.throws(() => schema.validate(obj), Error);
-                });
-                it('overadditional property', () => {
-                    const schema = createRxSchema(schemas.human);
-                    const obj: any = schemaObjects.human();
-                    obj['_id'] = randomCouchString(10);
-                    obj['token'] = randomCouchString(5);
-                    assert.throws(() => schema.validate(obj), Error);
-                });
-                it('::after', () => {
-                    const schema = createRxSchema(schemas.human);
-                    const obj: any = schemaObjects.human();
-                    schema.validate(obj);
-                });
-                it('accessible error-parameters', () => {
-                    const schema = createRxSchema(schemas.human);
-                    const obj = schemaObjects.human();
-                    (obj as any)['foobar'] = 'barfoo';
-                    let hasThrown = false;
-                    try {
-                        schema.validate(obj);
-                    } catch (err) {
-                        const message = (err as any).parameters.errors[0].message;
-                        assert.ok(message.includes('additional'));
-                        hasThrown = true;
-                    }
-                    assert.ok(hasThrown);
-                });
-                it('should respect nested additionalProperties: false', () => {
-                    const jsonSchema: any = clone(schemas.heroArray);
-                    jsonSchema.properties.skills.items['additionalProperties'] = false;
-                    const schema = createRxSchema(jsonSchema);
-                    const obj = {
-                        name: 'foobar',
-                        skills: [
-                            {
-                                name: 'foo',
-                                damage: 10,
-                                nonDefinedField: 'foobar'
-                            }
-                        ],
-                    };
-
-                    let hasThrown = false;
-                    try {
-                        schema.validate(obj);
-                    } catch (err) {
-                        const message = (err as any).parameters.errors[0].message;
-                        assert.strictEqual(message, 'has additional properties');
-                        hasThrown = true;
-                    }
-                    assert.ok(hasThrown);
-                });
-                it('final fields should be required', () => {
-                    const schema = createRxSchema(schemas.humanFinal);
-                    let hasThrown = false;
-                    const obj = {
-                        passportId: 'foobar',
-                        firstName: 'foo',
-                        lastName: 'bar'
-                    };
-                    try {
-                        schema.validate(obj);
-                    } catch (err) {
-                        const deepParam = (err as any).parameters.errors[0].field;
-                        assert.strictEqual(deepParam, 'data.age');
-                        hasThrown = true;
-                    }
-                    assert.ok(hasThrown);
-                });
-                it('should show fields with undefined in the error-params', () => {
-                    const schema = createRxSchema(schemas.humanFinal);
-                    let error = null;
-                    try {
-                        schema.validate({
-                            foo: 'bar',
-                            noval: undefined,
-                            nr: 7
-                        });
-                    } catch (err) {
-                        error = err;
-                    }
-                    assert.ok(error);
-                    assert.deepStrictEqual((error as any).parameters.obj.noval, undefined);
-                    const text = (error as any).toString();
-                    assert.ok(text.includes('noval'));
+                /**
+                 * The order could contain meaning so having a different order
+                 * should result in a different hash.
+                 * Also sorting is not equal on all JavaScript runtimes,
+                 * so by not re-ordering we can ensure deterministic hashing.
+                 * @link https://github.com/pubkey/rxdb/pull/4005
+                 */
+                it('#4005 should respect the sort order', async () => {
+                    const schema1 = createRxSchema(Object.assign({}, schemas.humanDefault, {
+                        indexes: ['firstName', 'lastName']
+                    }), defaultHashSha256);
+                    const schema2 = createRxSchema(Object.assign({}, schemas.humanDefault, {
+                        indexes: ['lastName', 'firstName']
+                    }), defaultHashSha256);
+                    const hash1 = await schema1.hash;
+                    const hash2 = await schema2.hash;
+                    assert.ok(hash1 !== hash2);
                 });
             });
         });
         describe('.validateChange()', () => {
             describe('positive', () => {
                 it('should allow a valid change', () => {
-                    const schema = createRxSchema(schemas.human);
-                    const dataBefore = schemaObjects.human();
+                    const schema = createRxSchema(schemas.human, defaultHashSha256);
+                    const dataBefore = schemaObjects.humanData();
                     const dataAfter = clone(dataBefore);
                     dataAfter.age = 100;
 
@@ -721,8 +722,8 @@ config.parallel('rx-schema.test.js', () => {
             });
             describe('negative', () => {
                 it('should not allow to change the primary', async () => {
-                    const schema = createRxSchema(schemas.primaryHuman);
-                    const dataBefore = schemaObjects.human();
+                    const schema = createRxSchema(schemas.primaryHuman, defaultHashSha256);
+                    const dataBefore = schemaObjects.humanData();
                     const dataAfter = clone(dataBefore);
                     dataAfter.passportId = 'foobar';
 
@@ -733,8 +734,8 @@ config.parallel('rx-schema.test.js', () => {
                     );
                 });
                 it('should not allow to change a final field', async () => {
-                    const schema = createRxSchema(schemas.humanFinal);
-                    const dataBefore = schemaObjects.human();
+                    const schema = createRxSchema(schemas.humanFinal, defaultHashSha256);
+                    const dataBefore = schemaObjects.humanData();
                     dataBefore.age = 1;
                     const dataAfter = clone(dataBefore);
                     dataAfter.age = 100;
@@ -750,17 +751,17 @@ config.parallel('rx-schema.test.js', () => {
         describe('.getSchemaByObjectPath()', () => {
             describe('positive', () => {
                 it('get firstLevel', () => {
-                    const schema = createRxSchema(schemas.human);
+                    const schema = createRxSchema(schemas.human, defaultHashSha256);
                     const schemaObj = getSchemaByObjectPath(schema.jsonSchema, 'passportId');
                     assert.strictEqual(schemaObj.type, 'string');
                 });
                 it('get deeper', () => {
-                    const schema = createRxSchema(schemas.nestedHuman);
+                    const schema = createRxSchema(schemas.nestedHuman, defaultHashSha256);
                     const schemaObj = getSchemaByObjectPath(schema.jsonSchema, 'mainSkill');
                     assert.ok(schemaObj.properties);
                 });
                 it('get nested', () => {
-                    const schema = createRxSchema(schemas.nestedHuman);
+                    const schema = createRxSchema(schemas.nestedHuman, defaultHashSha256);
                     const schemaObj = getSchemaByObjectPath(schema.jsonSchema, 'mainSkill.name');
                     assert.strictEqual(schemaObj.type, 'string');
                 });
@@ -770,25 +771,23 @@ config.parallel('rx-schema.test.js', () => {
         describe('.fillObjectWithDefaults()', () => {
             describe('positive', () => {
                 it('should fill all unset fields', () => {
-                    const schema = createRxSchema(schemas.humanDefault);
+                    const schema = createRxSchema(schemas.humanDefault, defaultHashSha256);
                     const data = {
                         foo: 'bar'
                     };
-                    const filled = schema.fillObjectWithDefaults(data);
-                    assert.ok(data !== filled);
+                    const filled = fillObjectWithDefaults(schema, data);
                     assert.strictEqual(filled.foo, 'bar');
                     assert.strictEqual(filled.age, 20);
                 });
                 it('should not overwrite given values', () => {
-                    const schema = createRxSchema(schemas.humanDefault);
+                    const schema = createRxSchema(schemas.humanDefault, defaultHashSha256);
                     const data = {
                         foo: 'bar',
                         age: 40
                     };
                     const data2 = clone(data);
-                    const filled = schema.fillObjectWithDefaults(data);
-                    const filled2 = schema.fillObjectWithDefaults(data2);
-                    assert.ok(data !== filled);
+                    const filled = fillObjectWithDefaults(schema, data);
+                    const filled2 = fillObjectWithDefaults(schema, data2);
                     assert.strictEqual(filled.foo, 'bar');
                     assert.strictEqual(filled.age, 40);
                     assert.strictEqual(filled2.foo, 'bar');
@@ -799,13 +798,14 @@ config.parallel('rx-schema.test.js', () => {
     });
     describe('issues', () => {
         it('#590 Strange schema behavior with sub-sub-index', async () => {
-            const schema: RxJsonSchema<{ id: string, fileInfo: any }> = {
+            const schema: RxJsonSchema<{ id: string; fileInfo: any; }> = {
                 version: 0,
                 primaryKey: 'id',
                 type: 'object',
                 properties: {
                     id: {
-                        type: 'string'
+                        type: 'string',
+                        maxLength: 100
                     },
                     fileInfo: {
                         type: 'object',
@@ -814,7 +814,10 @@ config.parallel('rx-schema.test.js', () => {
                                 type: 'object',
                                 properties: {
                                     time: {
-                                        type: 'number'
+                                        type: 'number',
+                                        minimum: 0,
+                                        maximum: 10000,
+                                        multipleOf: 1
                                     }
                                 }
                             }
@@ -824,8 +827,8 @@ config.parallel('rx-schema.test.js', () => {
                 indexes: ['fileInfo.watch.time']
             };
             const db = await createRxDatabase({
-                name: randomCouchString(10),
-                storage: getRxStoragePouch('memory')
+                name: randomToken(10),
+                storage: config.storage.getStorage()
             });
             const cols = await db.addCollections({
                 items: {
@@ -842,30 +845,45 @@ config.parallel('rx-schema.test.js', () => {
                 }
             });
 
-            const query = cols.items.find()
-                .where('fileInfo.watch.time')
-                .gt(-9999999999999999999999999999)
-                .sort('fileInfo.watch.time');
+            const query = cols.items.find({
+                selector: {
+                    'fileInfo.watch.time': {
+                        $gt: -999999999999999
+                    }
+                },
+                sort: [
+                    { 'fileInfo.watch.time': 'asc' }
+                ]
+            });
+
             const found = await query.exec();
             assert.strictEqual(found.length, 1);
             assert.strictEqual(found[0].fileInfo.watch.time, 1);
-
-            db.destroy();
+            db.close();
         });
         it('#620 indexes should not be required', async () => {
-            const mySchema: RxJsonSchema<{ passportId: string, firstName: string; lastName: string; age: number; }> = {
+            if (config.storage.name.includes('dexie')) {
+                /**
+                 * IndexedDB has some non-indexable types, so this does not work in dexie.
+                 * @link https://github.com/pubkey/rxdb/pull/6643#issuecomment-2505310082
+                 */
+                return;
+            }
+            const mySchema: RxJsonSchema<{ passportId: string; firstName: string; lastName: string; age: number; }> = {
                 version: 0,
                 primaryKey: 'passportId',
                 type: 'object',
                 properties: {
                     passportId: {
-                        type: 'string'
+                        type: 'string',
+                        maxLength: 100
                     },
                     firstName: {
                         type: 'string'
                     },
                     lastName: {
-                        type: 'string'
+                        type: 'string',
+                        maxLength: 100
                     },
                     age: {
                         type: 'integer',
@@ -877,8 +895,8 @@ config.parallel('rx-schema.test.js', () => {
             };
             // create a database
             const db = await createRxDatabase({
-                name: randomCouchString(10),
-                storage: getRxStoragePouch('memory')
+                name: randomToken(10),
+                storage: config.storage.getStorage()
             });
             const collections = await db.addCollections({
                 test: {
@@ -890,25 +908,28 @@ config.parallel('rx-schema.test.js', () => {
                 firstName: 'Bob',
                 age: 56
             });
-            db.destroy();
+            db.close();
         });
         it('#697 Indexes do not work in objects named "properties"', async () => {
-            const mySchema: RxJsonSchema<{ id: string; properties: any }> = {
+            const mySchema: RxJsonSchema<{ id: string; properties: any; }> = {
                 version: 0,
                 primaryKey: 'id',
                 type: 'object',
                 properties: {
                     id: {
-                        type: 'string'
+                        type: 'string',
+                        maxLength: 100
                     },
                     properties: {
                         type: 'object',
                         properties: {
                             name: {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             },
                             content: {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             }
                         }
                     },
@@ -918,8 +939,8 @@ config.parallel('rx-schema.test.js', () => {
 
             // create a database
             const db = await createRxDatabase({
-                name: randomCouchString(10),
-                storage: getRxStoragePouch('memory')
+                name: randomToken(10),
+                storage: config.storage.getStorage()
             });
             const collections = await db.addCollections({
                 test: {
@@ -928,14 +949,14 @@ config.parallel('rx-schema.test.js', () => {
             });
 
             await collections.test.insert({
-                id: randomCouchString(12),
+                id: randomToken(12),
                 properties: {
                     name: 'Title',
                     content: 'Post content'
                 }
             });
 
-            db.destroy();
+            db.close();
         });
         it('#697(2) should also work deep nested', async () => {
             const mySchema: RxJsonSchema<{ id: string; properties: any; }> = {
@@ -944,16 +965,19 @@ config.parallel('rx-schema.test.js', () => {
                 primaryKey: 'id',
                 properties: {
                     id: {
-                        type: 'string'
+                        type: 'string',
+                        maxLength: 100
                     },
                     properties: {
                         type: 'object',
                         properties: {
                             name: {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             },
                             properties: {
-                                type: 'string'
+                                type: 'string',
+                                maxLength: 100
                             }
                         }
                     },
@@ -963,8 +987,8 @@ config.parallel('rx-schema.test.js', () => {
 
             // create a database
             const db = await createRxDatabase({
-                name: randomCouchString(10),
-                storage: getRxStoragePouch('memory')
+                name: randomToken(10),
+                storage: config.storage.getStorage()
             });
             const collections = await db.addCollections({
                 test: {
@@ -973,7 +997,7 @@ config.parallel('rx-schema.test.js', () => {
             });
 
             await collections.test.insert({
-                id: randomCouchString(12),
+                id: randomToken(12),
                 properties: {
                     name: 'Title',
                     properties: 'Post content'
@@ -982,13 +1006,251 @@ config.parallel('rx-schema.test.js', () => {
 
             assert.deepStrictEqual(
                 [
-                    ['properties.name'],
-                    ['properties.properties']
+                    ['_deleted', 'properties.name', 'id'],
+                    ['_deleted', 'properties.properties', 'id'],
+                    ['_meta.lwt', 'id']
                 ],
                 collections.test.schema.indexes
             );
 
-            db.destroy();
+            db.close();
+        });
+        /**
+         * @link https://github.com/pubkey/rxdb/issues/3994#issuecomment-1260073490
+         */
+        it('#3994 must work with a boolean index', async () => {
+            if (config.storage.name.includes('random-delay')) {
+                return;
+            }
+
+            const db = await createRxDatabase({
+                name: randomToken(10),
+                storage: config.storage.getStorage()
+            });
+
+            const mySchema = {
+                'keyCompression': false,
+                'version': 0,
+                'primaryKey': '_id',
+                'type': 'object',
+                'properties': {
+                    '_id': {
+                        'type': 'string',
+                        'maxLength': 100
+                    },
+                    'data': {
+                        'type': 'object'
+                    },
+                    'isNew': {
+                        'type': 'boolean',
+                        'default': false
+                    },
+                    'createdAt': {
+                        'type': 'string',
+                        'maxLength': 24
+                    },
+                    'updatedAt': {
+                        'type': 'string',
+                        'maxLength': 24
+                    }
+                },
+                'required': [
+                    '_id',
+                    'data',
+                    'createdAt',
+                    'updatedAt',
+                    'isNew'
+                ],
+                'indexes': [
+                    'createdAt',
+                    'updatedAt',
+                    'isNew'
+                ]
+            };
+            await db.addCollections({
+                test: {
+                    schema: mySchema
+                }
+            });
+
+            db.close();
+        });
+        it('#4951 patternProperties are allowed', async () => {
+            /**
+             * Dexie.js does not support boolean indexes,
+             * see docs-src/rx-storage-dexie.md
+             */
+            if (config.storage.name.includes('dexie')) {
+                return;
+            }
+
+            const db = await createRxDatabase({
+                name: randomToken(10),
+                storage: config.storage.getStorage()
+            });
+
+            const mySchema = {
+                'keyCompression': false,
+                'version': 0,
+                'primaryKey': 'passportId',
+                'type': 'object',
+                'properties': {
+                    passportId: {
+                        type: 'string',
+                        maxLength: 100
+                    },
+                    firstName: {
+                        type: 'string'
+                    },
+                    lastName: {
+                        type: 'string'
+                    },
+                    age: {
+                        type: 'integer',
+                        minimum: 0,
+                        maximum: 150
+                    },
+                    tags: {
+                        type: 'object',
+                        patternProperties: {
+                            '.*': {
+                                type: 'object',
+                                properties: {
+                                    created: {
+                                        type: 'integer',
+                                    },
+                                    name: {
+                                        type: 'string',
+                                    },
+                                },
+                                required: ['created', 'name'],
+                            }
+                        },
+                    },
+                },
+            };
+            const collections = await db.addCollections({
+                test: {
+                    schema: mySchema
+                }
+            });
+
+            const tags = {
+                hello: {
+                    created: 1,
+                    name: 'hello',
+                },
+                world: {
+                    created: 2,
+                    name: 'world',
+                }
+            };
+
+            // insert a document
+            await collections.test.insert({
+                passportId: 'foobar',
+                firstName: 'Bob',
+                lastName: 'Kelso',
+                age: 56,
+                tags,
+            });
+
+            const myDocument = await collections.test
+                .findOne()
+                .exec();
+
+            assert.deepStrictEqual(myDocument.toJSON().tags.hello, tags.hello, 'myDocument.toJSON().tags.hello');
+            assert.deepStrictEqual(myDocument.toJSON().tags.world, tags.world, 'myDocument.toJSON().tags.world');
+            assert.deepStrictEqual(Object.keys(myDocument.toJSON().tags), Object.keys(tags), 'Object.keys(myDocument.toJSON().tags)');
+
+            assert.deepStrictEqual(JSON.stringify(myDocument.get('tags').hello), JSON.stringify(tags.hello), 'myDocument.get(\'tags\').hello');
+            assert.deepStrictEqual(JSON.stringify(myDocument.get('tags').world), JSON.stringify(tags.world), 'myDocument.get(\'tags\').world');
+
+            assert.deepStrictEqual(JSON.stringify(myDocument.tags.hello), JSON.stringify(tags.hello), 'myDocument.tags.hello');
+            assert.deepStrictEqual(JSON.stringify(myDocument.tags.world), JSON.stringify(tags.world), 'myDocument.tags.world');
+
+            db.close();
+        });
+        /**
+         * Using Infinity as "maximum" does not work
+         * and should throw a proper error.
+         */
+        it('broken on Infinity numbers in index sizes', async () => {
+            const db = await createRxDatabase({
+                name: randomToken(10),
+                storage: config.storage.getStorage()
+            });
+
+            const brokenSchemas: RxJsonSchema<any>[] = [
+                {
+                    version: 0,
+                    type: 'object',
+                    primaryKey: 'id',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            maxLength: 100
+                        },
+                        nr: {
+                            type: 'number',
+                            minimum: -Infinity,
+                            maximum: 100,
+                            multipleOf: 1
+                        }
+                    },
+                    indexes: [
+                        ['nr']
+                    ]
+                },
+                {
+                    version: 0,
+                    type: 'object',
+                    primaryKey: 'id',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            maxLength: Infinity
+                        }
+                    },
+                    indexes: [
+                        ['nr']
+                    ]
+                },
+                {
+                    version: 0,
+                    type: 'object',
+                    primaryKey: 'id',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            maxLength: 100
+                        },
+                        nr: {
+                            type: 'number',
+                            minimum: 0,
+                            maximum: Infinity,
+                            multipleOf: 1
+                        }
+                    },
+                    indexes: [
+                        ['nr']
+                    ]
+                }
+            ];
+
+            for (const schema of brokenSchemas) {
+                await assertThrows(
+                    () => db.addCollections({
+                        test: {
+                            schema
+                        }
+                    }),
+                    'RxError',
+                    'SC41'
+                );
+            }
+
+            db.close();
         });
     });
     describe('wait a bit', () => {

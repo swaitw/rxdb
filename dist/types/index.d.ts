@@ -1,24 +1,30 @@
-/**
- * this is the default rxdb-export
- * It has a batteries-included guarantee.
- * It basically just rxdb-core with some default plugins
+// @ts-nocheck
+        /**
+ * this is the main entry-point
+ * for when the you call "import from 'rxdb'".
  */
-import type { RxDatabase, RxDatabaseCreator, RxCollection } from './types';
-/**
- * Adds the default plugins
- * that are used on non-custom builds.
- */
-export declare function addDefaultRxPlugins(): void;
-/**
- * Because we have set sideEffects: false
- * in the package.json, we have to ensure that the default plugins
- * are added before the first database is created.
- * So we have to wrap the createRxDatabase function.
- * Always ensure that this function has the same typings as in the rx-database.ts
- * TODO create a type for that function and use it on both sides.
- */
-export declare function createRxDatabase<Collections = {
-    [key: string]: RxCollection;
-}, Internals = any, InstanceCreationOptions = any>(params: RxDatabaseCreator<Internals, InstanceCreationOptions>): Promise<RxDatabase<Collections, Internals, InstanceCreationOptions>>;
-export * from './core';
-export * from './plugins/pouchdb';
+export * from './plugin.d.ts';
+export * from './rx-database.d.ts';
+export * from './rx-error.d.ts';
+export * from './rx-database-internal-store.d.ts';
+export * from './overwritable.d.ts';
+export * from './rx-collection.d.ts';
+export * from './rx-collection-helper.d.ts';
+export * from './rx-document.d.ts';
+export * from './rx-change-event.d.ts';
+export * from './rx-document-prototype-merge.d.ts';
+export * from './rx-query.d.ts';
+export * from './rx-query-single-result.d.ts';
+export * from './rx-query-helper.d.ts';
+export * from './rx-schema.d.ts';
+export * from './rx-schema-helper.d.ts';
+export * from './rx-storage-helper.d.ts';
+export * from './replication-protocol/index.d.ts';
+export * from './rx-storage-multiinstance.d.ts';
+export * from './custom-index.d.ts';
+export * from './query-planner.d.ts';
+export * from './plugin-helpers.d.ts';
+export * from './plugins/utils/index.d.ts';
+export * from './hooks.d.ts';
+export * from './query-cache.d.ts';
+export type * from './types/index.d.ts';

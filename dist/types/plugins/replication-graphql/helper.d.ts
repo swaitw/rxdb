@@ -1,10 +1,15 @@
-export declare const GRAPHQL_REPLICATION_PLUGIN_IDENT = "rxdbreplicationgraphql";
-export declare const DEFAULT_MODIFIER: (d: any) => Promise<any>;
-/**
- * Returns a new revision key without the revision height.
- * The revision is crafted for the graphql replication
- * and contains the information that this document data was pulled
- * from the remote server and not saved by the client.
- */
-export declare function createRevisionForPulledDocument(endpointHash: string, doc: any): string;
-export declare function wasRevisionfromPullReplication(endpointHash: string, revision: string): boolean;
+import type { RxGraphQLReplicationClientState, RxGraphQLReplicationQueryBuilderResponseObject } from '../../types/index.d.ts';
+export declare const GRAPHQL_REPLICATION_PLUGIN_IDENTITY_PREFIX = "graphql";
+export interface GraphQLError {
+    message: string;
+    locations: Array<{
+        line: number;
+        column: number;
+    }>;
+    path: string[];
+}
+export type GraphQLErrors = Array<GraphQLError>;
+export declare function graphQLRequest(fetchRequest: WindowOrWorkerGlobalScope['fetch'], httpUrl: string, clientState: RxGraphQLReplicationClientState, queryParams: RxGraphQLReplicationQueryBuilderResponseObject): Promise<any>;
+export declare function getDataFromResult(result: {
+    data: object;
+}, userDefinedDataPath: string | string[] | undefined): any;

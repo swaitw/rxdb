@@ -1,22 +1,20 @@
-import React, { createContext, useEffect, useState } from 'react';
-import { addPouchPlugin } from 'rxdb';
+import './shim';
+import 'react-native-get-random-values';
+
+import React, {useEffect, useState} from 'react';
 import Heroes from './Heroes';
 import initializeDb from './initializeDb';
-
-addPouchPlugin(require('pouchdb-adapter-asyncstorage').default);
-addPouchPlugin(require('pouchdb-adapter-http'));
-
-export const AppContext = createContext();
+import { AppContext } from "./context";
 
 export const App = () => {
     const [db, setDb] = useState(null);
 
     useEffect(() => {
         const initDB = async () => {
-            const _db = await initializeDb();
+            const _db = await initializeDb(true);
             setDb(_db);
         };
-        initDB();
+        initDB().then();
     }, []);
 
     return (
